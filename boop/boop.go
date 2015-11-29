@@ -1,10 +1,10 @@
 package main
 
 import (
-	"code.google.com/p/gordon-go/audio"
-	"code.google.com/p/portaudio-go/portaudio"
 	"flag"
 	"fmt"
+	"github.com/gordonklaus/audio"
+	"github.com/gordonklaus/portaudio"
 	"math"
 	"math/rand"
 	"time"

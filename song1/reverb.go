@@ -1,7 +1,7 @@
 package main
 
 import (
-	"code.google.com/p/gordon-go/audio"
+	"github.com/gordonklaus/audio"
 
 	"math"
 	"math/rand"

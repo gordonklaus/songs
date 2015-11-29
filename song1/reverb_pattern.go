@@ -1,8 +1,8 @@
 package main
 
 import (
-	"code.google.com/p/gordon-go/audio"
-	"code.google.com/p/gordon-go/audiogui"
+	"github.com/gordonklaus/audio"
+	"github.com/gordonklaus/audiogui"
 )
 
 var reverb_pattern = audiogui.NewPattern([]*audio.Note{}, map[string][]*audio.ControlPoint{

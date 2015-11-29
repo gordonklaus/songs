@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"code.google.com/p/gordon-go/audio"
+	"github.com/gordonklaus/audio"
 )
 
 func main() {

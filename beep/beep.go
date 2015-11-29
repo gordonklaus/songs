@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math"
 
-	"code.google.com/p/gordon-go/audio"
-	"code.google.com/p/gordon-go/gui"
-	"code.google.com/p/portaudio-go/portaudio"
+	"github.com/gordonklaus/audio"
+	"github.com/gordonklaus/gui"
+	"github.com/gordonklaus/portaudio"
 )
 
 func main() {

@@ -1,6 +1,6 @@
 package main
 
-import "code.google.com/p/gordon-go/audio"
+import "github.com/gordonklaus/audio"
 
 var score = &audio.Score{[]*audio.Part{
 	{"Sines", []*audio.PatternEvent{
