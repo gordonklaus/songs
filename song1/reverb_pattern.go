@@ -7,7 +7,7 @@ import (
 
 var reverb_pattern = audiogui.NewPattern([]*audio.Note{}, map[string][]*audio.ControlPoint{
 	"Sustain": {
-		{0, -16},
+		{0, 0},
 	},
 	"Dry": {
 		{0, -12},
