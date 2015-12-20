@@ -78,7 +78,7 @@ func (s *song) newBeat() {
 	var note *note
 	if len(s.beats) > 0 {
 		var r ratio
-		note, r = s.beatFreq.nextAfter(s.beats[len(s.beats)-1].note, []ratio{{1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}, {6, 1}})
+		note, r = s.beatFreq.nextAfter(s.beats[len(s.beats)-1].note, natRats)
 		count = r.a
 	} else {
 		note, _ = s.beatFreq.next(allRats)
@@ -93,6 +93,13 @@ func (s *song) newBeat() {
 	s.beats = append(s.beats, b)
 	s.MultiVoice.Add(newSineVoice(b))
 }
+
+var natRats = func() (r []ratio) {
+	for i := 1; i <= 6; i++ {
+		r = append(r, ratio{i, 1})
+	}
+	return
+}()
 
 func (s *song) Sing() float64 {
 	s.EventDelay.Step()
@@ -160,7 +167,7 @@ type note struct {
 func newMelody(center, coherencyTime float64) melody {
 	return melody{
 		center:        center,
-		coherency:     math.Pow(.01, 1./coherencyTime),
+		coherency:     math.Pow(.01, 1/coherencyTime),
 		coherencyTime: coherencyTime,
 		history:       []*note{{0, center, 1}},
 	}
@@ -172,7 +179,6 @@ func (m *melody) next(rats []ratio) (*note, ratio) {
 
 func (m *melody) nextAfter(prev *note, rats []ratio) (*note, ratio) {
 	cSum, ampSum := m.historyComplexity()
-
 	sum := 0.0
 	sums := make([]float64, len(rats))
 	for i, r := range rats {
@@ -180,59 +186,8 @@ func (m *melody) nextAfter(prev *note, rats []ratio) (*note, ratio) {
 		sum += math.Exp2(-p*p/2) * math.Exp2(-m.complexity(prev, cSum, ampSum, r))
 		sums[i] = sum
 	}
-	i := sort.SearchFloat64s(sums, sum * rand.Float64())
-	next := m.appendHistory(prev, rats[i])
-
-	for i, n := range m.history {
-		if m.time-n.t < m.coherencyTime {
-			m.history = m.history[i:]
-			d := m.history[0].n
-			for _, n := range m.history[1:] {
-				d = gcd(d, n.n)
-			}
-			for i := range m.history {
-				m.history[i].n /= d
-			}
-			break
-		}
-	}
-
-	return next, rats[i]
-}
-
-var allRats []ratio
-
-func init() {
-	pow := func(a, x int) int {
-		y := 1
-		for x > 0 {
-			y *= a
-			x--
-		}
-		return y
-	}
-	mul := func(n, d, a, x int) (int, int) {
-		if x > 0 {
-			return n * pow(a, x), d
-		}
-		return n, d * pow(a, -x)
-	}
-	for _, two := range []int{-3, -2, -1, 0, 1, 2, 3} {
-		for _, three := range []int{-2, -1, 0, 1, 2} {
-			for _, five := range []int{-1, 0, 1} {
-				for _, seven := range []int{-1, 0, 1} {
-					n, d := 1, 1
-					n, d = mul(n, d, 2, two)
-					n, d = mul(n, d, 3, three)
-					n, d = mul(n, d, 5, five)
-					n, d = mul(n, d, 7, seven)
-					if complexity(n, d) < 12 {
-						allRats = append(allRats, ratio{n, d})
-					}
-				}
-			}
-		}
-	}
+	i := sort.SearchFloat64s(sums, sum*rand.Float64())
+	return m.appendHistory(prev, rats[i]), rats[i]
 }
 
 func (m *melody) historyComplexity() (cSum, ampSum float64) {
@@ -285,6 +240,21 @@ func (m *melody) appendHistory(prev *note, r ratio) *note {
 	}
 	n := &note{m.time, prev.f * r.float(), r.a * prevN}
 	m.history = append(m.history, n)
+
+	for i, n := range m.history {
+		if m.time-n.t < m.coherencyTime {
+			m.history = m.history[i:]
+			break
+		}
+	}
+	d := m.history[0].n
+	for _, n := range m.history[1:] {
+		d = gcd(d, n.n)
+	}
+	for i := range m.history {
+		m.history[i].n /= d
+	}
+
 	return n
 }
 
@@ -297,3 +267,37 @@ func gcd(a, b int) int {
 	}
 	return b
 }
+
+var allRats = func() (rats []ratio) {
+	pow := func(a, x int) int {
+		y := 1
+		for x > 0 {
+			y *= a
+			x--
+		}
+		return y
+	}
+	mul := func(n, d, a, x int) (int, int) {
+		if x > 0 {
+			return n * pow(a, x), d
+		}
+		return n, d * pow(a, -x)
+	}
+	for _, two := range []int{-3, -2, -1, 0, 1, 2, 3} {
+		for _, three := range []int{-2, -1, 0, 1, 2} {
+			for _, five := range []int{-1, 0, 1} {
+				for _, seven := range []int{-1, 0, 1} {
+					n, d := 1, 1
+					n, d = mul(n, d, 2, two)
+					n, d = mul(n, d, 3, three)
+					n, d = mul(n, d, 5, five)
+					n, d = mul(n, d, 7, seven)
+					if complexity(n, d) < 12 {
+						rats = append(rats, ratio{n, d})
+					}
+				}
+			}
+		}
+	}
+	return
+}()
