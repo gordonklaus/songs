@@ -19,8 +19,8 @@ var (
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	audio.Play(&song{
-		melody:   newMelody(256, 4),
-		beatFreq: newMelody(1, 4),
+		melody:   newMelody(256, 16),
+		beatFreq: newMelody(.25, 16),
 	})
 }
 
@@ -63,7 +63,7 @@ func (s *song) beat() {
 		s.MultiVoice.Add(newSineVoice(s.beats[len(s.beats)-1]))
 	}
 
-	for len(s.beats) == 0 || len(s.beats) < 5 && rand.Float64() < .75 {
+	for len(s.beats) == 0 || len(s.beats) < 6 && rand.Float64() < .8 {
 		s.newBeat()
 	}
 
@@ -82,11 +82,12 @@ func (s *song) newBeat() {
 		count = r.a
 	} else {
 		note, _ = s.beatFreq.next(allRats)
-		count = 1 + rand.Intn(6)
+		count = 1 + rand.Intn(6) // TODO: bias towards simple harmony
 	}
 	sineFreq, _ := s.melody.next(allRats)
 	b := beat{
 		count:    count,
+		duration: 1 / note.f,
 		note:     note,
 		sineFreq: sineFreq.f,
 	}
@@ -112,15 +113,14 @@ func (s *song) Done() bool {
 
 type sineVoice struct {
 	Osc audio.FixedFreqSineOsc
-	Env *audio.AttackReleaseEnv
+	Env audio.ExpEnv
 	amp float64
-	n   int
 }
 
 func newSineVoice(b beat) *sineVoice {
 	v := &sineVoice{}
 	v.Osc.SetFreq(b.sineFreq)
-	v.Env = audio.NewAttackReleaseEnv(.1, 4)
+	v.Env.Go(1, .1).Go(.7, b.duration-.2).Go(0, .1)
 	v.amp = 4 / math.Log2(b.sineFreq)
 	return v
 }
@@ -128,14 +128,9 @@ func newSineVoice(b beat) *sineVoice {
 func (v *sineVoice) InitAudio(p audio.Params) {
 	v.Osc.InitAudio(p)
 	v.Env.InitAudio(p)
-	v.n = int(p.SampleRate * .1)
 }
 
 func (v *sineVoice) Sing() float64 {
-	v.n--
-	if v.n < 0 {
-		v.Env.Release()
-	}
 	return math.Tanh(2*v.Osc.Sine()) * v.Env.Sing() * v.amp
 }
 
