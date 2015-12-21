@@ -49,8 +49,7 @@ func (w *window) KeyPress(k gui.KeyEvent) {
 		v := &sineVoice{}
 		v.Sine.SetFreq(pitchToFreq(p))
 		w.voices[k.Key] = v
-		v.Env.SetAttackTime(.01)
-		v.Env.SetReleaseTime(2)
+		v.Env.AttackHoldRelease(.01, 999, 0)
 		w.Multi.Add(v)
 	}
 }
@@ -58,7 +57,7 @@ func (w *window) KeyPress(k gui.KeyEvent) {
 func (w *window) KeyRelease(k gui.KeyEvent) {
 	if v, ok := w.voices[k.Key]; ok {
 		delete(w.voices, k.Key)
-		v.Env.Release()
+		v.Env.Release(2)
 	}
 }
 
@@ -70,7 +69,7 @@ func (w *window) processAudio(out []float32) {
 
 type sineVoice struct {
 	Sine audio.FixedFreqSineOsc
-	Env  audio.AttackReleaseEnv
+	Env  audio.ExpEnv
 }
 
 func (v *sineVoice) Sing() float64 {

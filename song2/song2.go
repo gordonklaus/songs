@@ -28,25 +28,23 @@ type sines struct {
 }
 
 func (s *sines) Play(n struct{ Pitch, Amplitude []*audio.ControlPoint }) {
-	s.Add(&sineVoice{
-		Pitch: audio.NewControl(n.Pitch),
-		Amp:   audio.NewControl(n.Amplitude),
-		Env:   audio.NewAttackReleaseEnv(.05, 4),
-	})
+	v := &sineVoice{}
+	v.Pitch.SetPoints(n.Pitch)
+	v.Amp.SetPoints(n.Amplitude)
+	d := math.Max(v.Pitch.Duration(), v.Amp.Duration())
+	v.Env.AttackHoldRelease(.05, d - .05, 4)
+	s.Add(v)
 }
 
 type sineVoice struct {
-	Pitch, Amp *audio.Control
-	Env        *audio.AttackReleaseEnv
+	Pitch, Amp audio.Control
+	Env        audio.ExpEnv
 	Sine       audio.SineOsc
 }
 
 func (v *sineVoice) Sing() float64 {
 	f := math.Exp2(v.Pitch.Sing())
 	g := math.Exp2(v.Amp.Sing()) * v.Env.Sing()
-	if v.Pitch.Done() && v.Amp.Done() {
-		v.Env.Release()
-	}
 	return g * math.Tanh(2*v.Sine.Sine(f))
 }
 
