@@ -10,12 +10,6 @@ import (
 	"github.com/gordonklaus/audio"
 )
 
-var (
-	print   = fmt.Print
-	printf  = fmt.Printf
-	println = fmt.Println
-)
-
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	audio.Play(&song{
@@ -63,7 +57,7 @@ func (s *song) beat() {
 		s.MultiVoice.Add(newSineVoice(s.beats[len(s.beats)-1]))
 	}
 
-	for len(s.beats) == 0 || len(s.beats) < 6 && rand.Float64() < .8 {
+	for len(s.beats) == 0 || len(s.beats) < 5 {
 		s.newBeat()
 	}
 
@@ -78,13 +72,15 @@ func (s *song) newBeat() {
 	var note *note
 	if len(s.beats) > 0 {
 		var r ratio
-		note, r = s.beatFreq.nextAfter(s.beats[len(s.beats)-1].note, natRats)
+		parent := s.beats[len(s.beats)-1]
+		note, r = s.beatFreq.nextAfter(parent.duration, parent.note, natRats)
 		count = r.a
 	} else {
-		note, _ = s.beatFreq.next(allRats)
+		note, _ = s.beatFreq.next(0)
 		count = 1 + rand.Intn(6) // TODO: bias towards simple harmony
+		note.t.max += float64(count) / note.f
 	}
-	sineFreq, _ := s.melody.next(allRats)
+	sineFreq, _ := s.melody.next(float64(count) / note.f)
 	b := beat{
 		count:    count,
 		duration: 1 / note.f,
@@ -154,7 +150,7 @@ type melody struct {
 }
 
 type note struct {
-	t float64
+	t interval
 	f float64
 	n int
 }
@@ -162,34 +158,40 @@ type note struct {
 func newMelody(center, coherencyTime float64) melody {
 	return melody{
 		center:        center,
-		coherency:     math.Pow(.01, 1/coherencyTime),
+		coherency:     math.Pow(.01, -1/coherencyTime),
 		coherencyTime: coherencyTime,
-		history:       []*note{{0, center, 1}},
+		history:       []*note{{interval{}, center, 1}},
 	}
 }
 
-func (m *melody) next(rats []ratio) (*note, ratio) {
-	return m.nextAfter(m.history[len(m.history)-1], rats)
+func (m *melody) next(duration float64) (*note, ratio) {
+	return m.nextAfter(duration, m.history[len(m.history)-1], allRats)
 }
 
-func (m *melody) nextAfter(prev *note, rats []ratio) (*note, ratio) {
-	cSum, ampSum := m.historyComplexity()
+func (m *melody) nextAfter(duration float64, prev *note, rats []ratio) (*note, ratio) {
+	if prev.t.max < m.time-m.coherencyTime {
+		fmt.Printf("melody: %.2f < %.2f\n", prev.t.max, m.time-m.coherencyTime)
+	}
+
+	t := interval{m.time, m.time+duration}
+
+	cSum, ampSum := m.historyComplexity(t)
 	sum := 0.0
 	sums := make([]float64, len(rats))
 	for i, r := range rats {
 		p := math.Log2(prev.f * r.float() / m.center)
-		sum += math.Exp2(-p*p/2) * math.Exp2(-m.complexity(prev, cSum, ampSum, r))
+		sum += math.Exp2(-p*p/2) * math.Exp2(-m.complexity(t, prev, cSum, ampSum, r))
 		sums[i] = sum
 	}
 	i := sort.SearchFloat64s(sums, sum*rand.Float64())
-	return m.appendHistory(prev, rats[i]), rats[i]
+	return m.appendHistory(t, prev, rats[i]), rats[i]
 }
 
-func (m *melody) historyComplexity() (cSum, ampSum float64) {
+func (m *melody) historyComplexity(t interval) (cSum, ampSum float64) {
 	for i, n1 := range m.history {
-		a1 := math.Pow(m.coherency, m.time-n1.t)
+		a1 := math.Pow(m.coherency, t.overlap(n1.t))
 		for _, n2 := range m.history[:i] {
-			a2 := math.Pow(m.coherency, m.time-n2.t)
+			a2 := math.Pow(m.coherency, t.overlap(n2.t))
 			cSum += a1 * a2 * float64(complexity(n1.n, n2.n))
 		}
 		ampSum += a1
@@ -197,11 +199,11 @@ func (m *melody) historyComplexity() (cSum, ampSum float64) {
 	return
 }
 
-func (m *melody) complexity(prev *note, cSum, ampSum float64, r ratio) float64 {
+func (m *melody) complexity(t interval, prev *note, cSum, ampSum float64, r ratio) float64 {
 	const a1 = 1
 	n1n := r.a * prev.n
 	for _, n2 := range m.history {
-		a2 := math.Pow(m.coherency, m.time-n2.t)
+		a2 := math.Pow(m.coherency, t.overlap(n2.t))
 		cSum += a1 * a2 * float64(complexity(n1n, n2.n*r.b))
 	}
 	return cSum / (ampSum + a1)
@@ -228,20 +230,22 @@ func complexity(a, b int) int {
 	return c
 }
 
-func (m *melody) appendHistory(prev *note, r ratio) *note {
+func (m *melody) appendHistory(t interval, prev *note, r ratio) *note {
 	prevN := prev.n
 	for i := range m.history {
 		m.history[i].n *= r.b
 	}
-	n := &note{m.time, prev.f * r.float(), r.a * prevN}
+	n := &note{t, prev.f * r.float(), r.a * prevN}
 	m.history = append(m.history, n)
 
-	for i, n := range m.history {
-		if m.time-n.t < m.coherencyTime {
-			m.history = m.history[i:]
-			break
+	history := []*note{}
+	for _, n := range m.history {
+		if n.t.max >= m.time-m.coherencyTime {
+			history = append(history, n)
 		}
 	}
+	m.history = history
+
 	d := m.history[0].n
 	for _, n := range m.history[1:] {
 		d = gcd(d, n.n)
