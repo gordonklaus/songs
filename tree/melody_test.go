@@ -13,7 +13,7 @@ func BenchmarkMelody(b *testing.B) {
 	m := newMelody(1, 8)
 	for i := 0; i < b.N; i++ {
 		m.time += .25
-		m.next(allRats)
+		m.next(0)
 	}
-	fmt.Println(m.history[len(m.history)-1].n)
+	fmt.Println(m.history[len(m.history)-1].rel)
 }
