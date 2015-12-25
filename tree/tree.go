@@ -65,11 +65,12 @@ func (s *song) newNode() {
 	if len(s.nodes) > 0 {
 		var r ratio
 		parent := s.nodes[len(s.nodes)-1]
-		childDuration, r = s.noteDuration.nextAfter(parent.childDuration.abs, parent.childDuration, natRats)
+		childDuration, r = s.noteDuration.nextAfter(parent.childDuration.abs, parent.childDuration, invNatRats)
 		numChildren = r.b
 	} else {
 		childDuration, _ = s.noteDuration.next(0)
-		numChildren = 1 + rand.Intn(6) // TODO: bias towards simple harmony
+		_, r := s.noteDuration.nextAfter(childDuration.abs, childDuration, natRats)
+		numChildren = r.a
 		childDuration.time.max += float64(numChildren) * childDuration.abs
 	}
 	s.nodes = append(s.nodes, node{
@@ -82,9 +83,16 @@ func (s *song) newNode() {
 	s.MultiVoice.Add(newSineVoice(sineFreq.abs, duration))
 }
 
-var natRats = func() (r []ratio) {
+var invNatRats = func() (r []ratio) {
 	for i := 1; i <= 6; i++ {
 		r = append(r, ratio{1, i})
+	}
+	return
+}()
+
+var natRats = func() (r []ratio) {
+	for i := 1; i <= 6; i++ {
+		r = append(r, ratio{i, 1})
 	}
 	return
 }()
