@@ -57,7 +57,7 @@ func (w *window) KeyPress(k gui.KeyEvent) {
 func (w *window) KeyRelease(k gui.KeyEvent) {
 	if v, ok := w.voices[k.Key]; ok {
 		delete(w.voices, k.Key)
-		v.Env.Release(2)
+		v.Env.ReleaseNow(2)
 	}
 }
 
