@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"time"
@@ -10,23 +11,13 @@ import (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	audio.Play(&song{
-		sineFreq:     newMelody(256, 16),
-		noteDuration: newMelody(4, 16),
-	})
+	audio.Play(&song{composer: newComposer()})
 }
 
 type song struct {
-	EventDelay   audio.EventDelay
-	sineFreq     melody
-	noteDuration melody
-	nodes        []node
-	MultiVoice   audio.MultiVoice
-}
-
-type node struct {
-	childDuration *note
-	numChildren   int
+	composer   *composer
+	EventDelay audio.EventDelay
+	MultiVoice audio.MultiVoice
 }
 
 func (s *song) InitAudio(p audio.Params) {
@@ -36,65 +27,17 @@ func (s *song) InitAudio(p audio.Params) {
 }
 
 func (s *song) next() {
-	for {
-		n := len(s.nodes)
-		if n == 0 {
-			break
+	select {
+	case e := <-s.composer.events:
+		for _, n := range e.notes {
+			s.MultiVoice.Add(newSineVoice(n))
 		}
-		s.nodes[n-1].numChildren--
-		if s.nodes[n-1].numChildren > 0 {
-			break
-		}
-		s.nodes = s.nodes[:n-1]
+		s.EventDelay.Delay(e.next, s.next)
+	default:
+		fmt.Print(".")
+		s.EventDelay.Delay(.01, s.next)
 	}
-
-	for len(s.nodes) == 0 || len(s.nodes) < 5 {
-		s.newNode()
-	}
-
-	t := s.nodes[len(s.nodes)-1].childDuration.abs
-	s.sineFreq.time += t
-	s.noteDuration.time += t
-	s.EventDelay.Delay(t, s.next)
 }
-
-func (s *song) newNode() {
-	var childDuration *note
-	numChildren := 1
-	if len(s.nodes) > 0 {
-		var r ratio
-		parent := s.nodes[len(s.nodes)-1]
-		childDuration, r = s.noteDuration.nextAfter(parent.childDuration.abs, parent.childDuration, invNatRats)
-		numChildren = r.b
-	} else {
-		childDuration, _ = s.noteDuration.next(0)
-		_, r := s.noteDuration.nextAfter(childDuration.abs, childDuration, natRats)
-		numChildren = r.a
-		childDuration.time.max += float64(numChildren) * childDuration.abs
-	}
-	s.nodes = append(s.nodes, node{
-		childDuration: childDuration,
-		numChildren:   numChildren,
-	})
-
-	duration := float64(numChildren) * childDuration.abs
-	sineFreq, _ := s.sineFreq.next(duration)
-	s.MultiVoice.Add(newSineVoice(sineFreq.abs, duration))
-}
-
-var invNatRats = func() (r []ratio) {
-	for i := 1; i <= 6; i++ {
-		r = append(r, ratio{1, i})
-	}
-	return
-}()
-
-var natRats = func() (r []ratio) {
-	for i := 1; i <= 6; i++ {
-		r = append(r, ratio{i, 1})
-	}
-	return
-}()
 
 func (s *song) Sing() float64 {
 	s.EventDelay.Step()
@@ -102,7 +45,7 @@ func (s *song) Sing() float64 {
 }
 
 func (s *song) Done() bool {
-	return s.MultiVoice.Done()
+	return false
 }
 
 type sineVoice struct {
@@ -111,11 +54,11 @@ type sineVoice struct {
 	amp float64
 }
 
-func newSineVoice(freq, duration float64) *sineVoice {
+func newSineVoice(n composedNote) *sineVoice {
 	v := &sineVoice{}
-	v.Osc.SetFreq(freq)
-	v.Env.Go(1, .1).Go(.7, duration-.2).Go(0, .1)
-	v.amp = 4 / math.Log2(freq)
+	v.Osc.SetFreq(n.frequency)
+	v.Env.Go(1, .1).Go(.7, n.duration-.2).Go(0, .1)
+	v.amp = 4 / math.Log2(n.frequency)
 	return v
 }
 
