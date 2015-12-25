@@ -22,7 +22,6 @@ type song struct {
 	noteDuration melody
 	nodes        []node
 	MultiVoice   audio.MultiVoice
-	done         bool
 }
 
 type node struct {
@@ -103,7 +102,7 @@ func (s *song) Sing() float64 {
 }
 
 func (s *song) Done() bool {
-	return s.done && s.MultiVoice.Done()
+	return s.MultiVoice.Done()
 }
 
 type sineVoice struct {
