@@ -41,7 +41,7 @@ func (s *song) next() {
 
 func (s *song) Sing() float64 {
 	s.EventDelay.Step()
-	return math.Tanh(s.MultiVoice.Sing() / 8)
+	return math.Tanh(s.MultiVoice.Sing() / 4)
 }
 
 func (s *song) Done() bool {
@@ -49,26 +49,23 @@ func (s *song) Done() bool {
 }
 
 type sineVoice struct {
-	Osc audio.FixedFreqSineOsc
+	Osc audio.SawOsc
+	LP  audio.LowPass1
 	Env audio.ExpEnv
 	amp float64
 }
 
 func newSineVoice(n composedNote) *sineVoice {
 	v := &sineVoice{}
-	v.Osc.SetFreq(n.frequency)
+	v.Osc.Freq(n.frequency)
+	v.LP.Freq(n.frequency)
 	v.Env.Go(1, .1).Go(.7, n.duration-.2).Go(0, .1)
 	v.amp = 4 / math.Log2(n.frequency)
 	return v
 }
 
-func (v *sineVoice) InitAudio(p audio.Params) {
-	v.Osc.InitAudio(p)
-	v.Env.InitAudio(p)
-}
-
 func (v *sineVoice) Sing() float64 {
-	return math.Tanh(2*v.Osc.Sine()) * v.Env.Sing() * v.amp
+	return v.LP.Filter(v.Osc.Saw()) * v.Env.Sing() * v.amp
 }
 
 func (v *sineVoice) Done() bool {
