@@ -39,9 +39,9 @@ func (s *song) Sing() float64 {
 		}
 
 		for _, t := range s.tones {
-			t.dAmp = math.Max(-8, math.Min(8, t.dAmp + 4*(rand.NormFloat64()+1/t.amp) / 20))
+			t.dAmp = math.Max(-8, math.Min(8, t.dAmp+4*(rand.NormFloat64()+1/t.amp)/20))
 			// t.dAmp *= .98
-			t.amp = math.Min(0, t.amp + t.dAmp / 20)
+			t.amp = math.Min(0, t.amp+t.dAmp/20)
 		}
 		// c := s.complexity()
 		// for _, t := range s.tones {
@@ -209,7 +209,7 @@ type tone struct {
 	amp, dAmp float64
 	n         int
 	Smoother  audio.LinSmoother
-	Osc       audio.FixedFreqSineOsc
+	Osc       audio.SineOsc
 }
 
 func newTone(n int, freq float64) *tone {
@@ -217,10 +217,10 @@ func newTone(n int, freq float64) *tone {
 	t.Smoother.SetValue(t.amp)
 	t.Smoother.SetAttackSpeed(2)
 	t.Smoother.SetReleaseSpeed(2)
-	t.Osc.SetFreq(freq)
+	t.Osc.Freq(freq)
 	return t
 }
 
 func (t *tone) sing() float64 {
-	return t.attenuate * math.Exp2(t.Smoother.Smooth(t.amp)) * math.Tanh(2*t.Osc.Sine())
+	return t.attenuate * math.Exp2(t.Smoother.Smooth(t.amp)) * math.Tanh(2*t.Osc.Osc())
 }

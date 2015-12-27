@@ -51,14 +51,14 @@ func (s *song) Done() bool {
 }
 
 type sineVoice struct {
-	Osc audio.FixedFreqSineOsc
+	Osc audio.SineOsc
 	Env audio.ExpEnv
 	amp float64
 }
 
 func newSineVoice(freq float64) *sineVoice {
 	v := &sineVoice{}
-	v.Osc.SetFreq(freq)
+	v.Osc.Freq(freq)
 	v.Env.AttackHoldRelease(.1, 0, 4)
 	v.amp = 4 / math.Log2(freq)
 	return v
@@ -70,7 +70,7 @@ func (v *sineVoice) InitAudio(p audio.Params) {
 }
 
 func (v *sineVoice) Sing() float64 {
-	return math.Tanh(2*v.Osc.Sine()) * v.Env.Sing() * v.amp
+	return math.Tanh(2*v.Osc.Osc()) * v.Env.Sing() * v.amp
 }
 
 func (v *sineVoice) Done() bool {

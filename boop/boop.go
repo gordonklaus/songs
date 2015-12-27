@@ -74,31 +74,31 @@ func relPrime(x, y int) bool {
 
 type sineBeat struct {
 	amp  float64
-	Sine audio.FixedFreqSineOsc
+	Sine audio.SineOsc
 	Env  normalOsc
 }
 
 func newSineBeat(amp, sineFreq, beatFreq, beatPhase, beatWidth float64) *sineBeat {
 	b := &sineBeat{amp: amp}
-	b.Sine.SetFreq(sineFreq)
-	b.Env.Sine.SetFreq(beatFreq / 2)
-	b.Env.Sine.SetPhase(beatPhase)
+	b.Sine.Freq(sineFreq)
+	b.Env.Sine.Freq(beatFreq / 2)
+	b.Env.Sine.Phase(beatPhase)
 	b.Env.width = math.Log(beatWidth)
 	return b
 }
 
 func (b *sineBeat) Sing() float64 {
-	return b.amp * b.Sine.Sine() * b.Env.osc()
+	return b.amp * b.Sine.Osc() * b.Env.osc()
 }
 
 func (b *sineBeat) Done() bool { return false }
 
 type normalOsc struct {
-	Sine  audio.FixedFreqSineOsc
+	Sine  audio.SineOsc
 	width float64
 }
 
 func (o *normalOsc) osc() float64 {
-	x := o.Sine.Sine() * o.width
+	x := o.Sine.Osc() * o.width
 	return math.Exp(-x * x)
 }

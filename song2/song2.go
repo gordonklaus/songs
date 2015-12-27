@@ -32,7 +32,7 @@ func (s *sines) Play(n struct{ Pitch, Amplitude []*audio.ControlPoint }) {
 	v.Pitch.SetPoints(n.Pitch)
 	v.Amp.SetPoints(n.Amplitude)
 	d := math.Max(v.Pitch.Duration(), v.Amp.Duration())
-	v.Env.AttackHoldRelease(.05, d - .05, 4)
+	v.Env.AttackHoldRelease(.05, d-.05, 4)
 	s.Add(v)
 }
 
@@ -45,7 +45,7 @@ type sineVoice struct {
 func (v *sineVoice) Sing() float64 {
 	f := math.Exp2(v.Pitch.Sing())
 	g := math.Exp2(v.Amp.Sing()) * v.Env.Sing()
-	return g * math.Tanh(2*v.Sine.Sine(f))
+	return g * math.Tanh(2*v.Sine.OscFreq(f))
 }
 
 func (v *sineVoice) Done() bool {
