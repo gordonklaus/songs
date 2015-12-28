@@ -53,7 +53,8 @@ type sineVoice struct {
 }
 
 func (v *sineVoice) Sing() float64 {
-	return v.Sine.OscFreq(math.Exp2(v.Pitch.Sing())) * math.Exp2(v.Amp.Sing())
+	v.Sine.Freq(math.Exp2(v.Pitch.Sing()))
+	return v.Sine.Sing() * math.Exp2(v.Amp.Sing())
 }
 
 func (v *sineVoice) Done() bool {

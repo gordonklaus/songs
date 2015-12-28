@@ -65,7 +65,7 @@ func newSineVoice(n composedNote) *sineVoice {
 }
 
 func (v *sineVoice) Sing() float64 {
-	return v.LP.Filter(v.Osc.Osc()) * v.Env.Sing() * v.amp
+	return v.LP.Filter(v.Osc.Sing()) * v.Env.Sing() * v.amp
 }
 
 func (v *sineVoice) Done() bool {

@@ -88,7 +88,7 @@ func newSineBeat(amp, sineFreq, beatFreq, beatPhase, beatWidth float64) *sineBea
 }
 
 func (b *sineBeat) Sing() float64 {
-	return b.amp * b.Sine.Osc() * b.Env.osc()
+	return b.amp * b.Sine.Sing() * b.Env.osc()
 }
 
 func (b *sineBeat) Done() bool { return false }
@@ -99,6 +99,6 @@ type normalOsc struct {
 }
 
 func (o *normalOsc) osc() float64 {
-	x := o.Sine.Osc() * o.width
+	x := o.Sine.Sing() * o.width
 	return math.Exp(-x * x)
 }

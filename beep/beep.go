@@ -73,7 +73,7 @@ type sineVoice struct {
 }
 
 func (v *sineVoice) Sing() float64 {
-	return distort(v.Env.Sing() * v.Sine.Osc())
+	return distort(v.Env.Sing() * v.Sine.Sing())
 }
 
 func (v *sineVoice) Done() bool {

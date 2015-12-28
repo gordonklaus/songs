@@ -70,7 +70,7 @@ func (v *sineVoice) InitAudio(p audio.Params) {
 }
 
 func (v *sineVoice) Sing() float64 {
-	return math.Tanh(2*v.Osc.Osc()) * v.Env.Sing() * v.amp
+	return math.Tanh(2*v.Osc.Sing()) * v.Env.Sing() * v.amp
 }
 
 func (v *sineVoice) Done() bool {
