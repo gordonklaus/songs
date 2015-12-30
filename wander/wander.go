@@ -43,7 +43,7 @@ func (s *song) beat() {
 
 func (s *song) Sing() float64 {
 	s.EventDelay.Step()
-	return math.Tanh(s.MultiVoice.Sing() / 8)
+	return audio.Saturate(s.MultiVoice.Sing() / 8)
 }
 
 func (s *song) Done() bool {
@@ -70,7 +70,7 @@ func (v *sineVoice) InitAudio(p audio.Params) {
 }
 
 func (v *sineVoice) Sing() float64 {
-	return math.Tanh(2*v.Osc.Sing()) * v.Env.Sing() * v.amp
+	return audio.Saturate(2*v.Osc.Sing()) * v.Env.Sing() * v.amp
 }
 
 func (v *sineVoice) Done() bool {

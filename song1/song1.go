@@ -40,7 +40,7 @@ func (s *sines) Play(n struct{ Pitch, Amplitude []*audio.ControlPoint }) {
 }
 
 func (s *sines) Sing() float64 {
-	return math.Exp2(s.Amplitude.Sing()) * math.Tanh(s.MultiVoice.Sing()*math.Exp2(s.Distortion.Sing()))
+	return math.Exp2(s.Amplitude.Sing()) * audio.Saturate(s.MultiVoice.Sing()*math.Exp2(s.Distortion.Sing()))
 }
 
 func (s *sines) Done() bool {

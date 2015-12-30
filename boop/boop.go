@@ -51,7 +51,7 @@ func main() {
 
 	s, err := portaudio.OpenDefaultStream(0, 1, p.SampleRate, 512, func(out []float32) {
 		for i := range out {
-			out[i] = float32(math.Tanh(m.Sing()))
+			out[i] = float32(audio.Saturate(m.Sing()))
 		}
 	})
 	if err != nil {

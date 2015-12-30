@@ -41,7 +41,7 @@ func (s *song) next() {
 
 func (s *song) Sing() float64 {
 	s.EventDelay.Step()
-	return math.Tanh(s.MultiVoice.Sing() / 4)
+	return audio.Saturate(s.MultiVoice.Sing() / 4)
 }
 
 func (s *song) Done() bool {

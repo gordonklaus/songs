@@ -52,7 +52,7 @@ func (s *song) Sing() float64 {
 	for _, t := range s.tones {
 		x += t.sing()
 	}
-	return math.Tanh(x)
+	return audio.Saturate(x)
 }
 
 func (s *song) Done() bool {
@@ -222,5 +222,5 @@ func newTone(n int, freq float64) *tone {
 }
 
 func (t *tone) sing() float64 {
-	return t.attenuate * math.Exp2(t.Smoother.Smooth(t.amp)) * math.Tanh(2*t.Osc.Sing())
+	return t.attenuate * math.Exp2(t.Smoother.Smooth(t.amp)) * audio.Saturate(2*t.Osc.Sing())
 }

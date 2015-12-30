@@ -45,7 +45,7 @@ type sineVoice struct {
 func (v *sineVoice) Sing() float64 {
 	v.Sine.Freq(math.Exp2(v.Pitch.Sing()))
 	g := math.Exp2(v.Amp.Sing()) * v.Env.Sing()
-	return g * math.Tanh(2*v.Sine.Sing())
+	return g * audio.Saturate(2*v.Sine.Sing())
 }
 
 func (v *sineVoice) Done() bool {
