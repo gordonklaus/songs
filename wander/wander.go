@@ -17,7 +17,11 @@ var (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
-	audio.Play(&song{rhythm: newRhythm(1./4, 8), melody: newMelody(256, 8)})
+	audio.Play(&song{
+		rhythm: newRhythm(1, 8),
+		melody: newMelody(256, 8),
+		Reverb: audio.NewReverb(),
+	})
 }
 
 type song struct {
@@ -25,12 +29,14 @@ type song struct {
 	rhythm     melody
 	melody     melody
 	MultiVoice audio.MultiVoice
+	Reverb     *audio.Reverb
 }
 
 func (s *song) InitAudio(p audio.Params) {
 	audio.Init(&s.EventDelay, p)
 	s.EventDelay.Delay(0, s.beat)
 	audio.Init(&s.MultiVoice, p)
+	audio.Init(&s.Reverb, p)
 }
 
 func (s *song) beat() {
@@ -43,7 +49,8 @@ func (s *song) beat() {
 
 func (s *song) Sing() float64 {
 	s.EventDelay.Step()
-	return audio.Saturate(s.MultiVoice.Sing() / 8)
+	x := s.MultiVoice.Sing()
+	return audio.Saturate((x + s.Reverb.Filter(x)) / 8)
 }
 
 func (s *song) Done() bool {
@@ -59,7 +66,7 @@ type sineVoice struct {
 func newSineVoice(freq float64) *sineVoice {
 	v := &sineVoice{}
 	v.Osc.Freq(freq)
-	v.Env.AttackHoldRelease(.1, 0, 4)
+	v.Env.AttackHoldRelease(.1, 0, .1)
 	v.amp = 4 / math.Log2(freq)
 	return v
 }
