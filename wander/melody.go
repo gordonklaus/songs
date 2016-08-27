@@ -12,10 +12,9 @@ type ratio struct {
 func (r ratio) float() float64 { return float64(r.a) / float64(r.b) }
 
 type melody struct {
-	bias          float64
 	rhythm        bool
+	bias          float64
 	center        float64
-	coherency     float64
 	coherencyTime float64
 
 	last    float64
@@ -29,11 +28,10 @@ type note struct {
 }
 
 func newMelody(center, coherencyTime float64) melody {
-	complexity := .6 // 0..1
+	complexity := .5 // 0..1
 	return melody{
 		bias:          math.Log2(complexity),
 		center:        center,
-		coherency:     math.Pow(.01, 1./coherencyTime),
 		coherencyTime: coherencyTime,
 		last:          center,
 		history:       []note{{0, 1}},
@@ -47,18 +45,34 @@ func newRhythm(center, coherencyTime float64) melody {
 }
 
 func (m *melody) next() float64 {
-	cSum, ampSum := m.historyComplexity()
+	notes := m.history
+	if m.rhythm {
+		notes = make([]note, 0, len(m.history)*(1+len(m.history))/2)
+		for i := range m.history {
+			n := 0
+			for _, n2 := range m.history[i:] {
+				n += n2.n
+				notes = append(notes, note{n: n})
+			}
+		}
+	}
 
+	cSum := m.complexitySum(notes)
+
+	rats := rats
+	if m.rhythm {
+		// rats = append(rats, ratio{0, 1})
+	}
 	sum := 0.0
 	sums := make([]float64, len(rats))
 	for i, r := range rats {
-		p := math.Log2(m.last * r.float() / m.center)
-		sum += math.Exp2(-p*p/2) * math.Exp2(m.bias*m.complexity(cSum, ampSum, r))
+		f := r.float()
+		if f == 0 {
+			f = 1
+		}
+		p := math.Log2(m.last * f / m.center)
+		sum += math.Exp2(-p*p/2) * math.Exp2(m.bias*m.complexity(notes, cSum, r))
 		sums[i] = sum
-	}
-	if m.rhythm {
-		sum += math.Exp2(m.bias * cSum / ampSum)
-		sums = append(sums, sum)
 	}
 	i := 0
 	x := sum * rand.Float64()
@@ -67,10 +81,6 @@ func (m *melody) next() float64 {
 			break
 		}
 	}
-	if i == len(rats) {
-		return 0
-	}
-	m.last *= rats[i].float()
 	m.history = m.appendHistory(rats[i])
 
 	for i, n := range m.history {
@@ -87,6 +97,11 @@ func (m *melody) next() float64 {
 		}
 	}
 
+	if rats[i].a == 0 {
+		return 0
+	} else {
+		m.last *= rats[i].float()
+	}
 	return m.last
 }
 
@@ -125,29 +140,51 @@ func init() {
 	}
 }
 
-func (m *melody) historyComplexity() (cSum, ampSum float64) {
-	for i, n1 := range m.history {
-		a1 := math.Pow(m.coherency, m.time-n1.t)
-		for _, n2 := range m.history[:i] {
-			a2 := math.Pow(m.coherency, m.time-n2.t)
-			cSum += a1 * a2 * float64(complexity(n1.n, n2.n))
+func (m *melody) complexitySum(notes []note) int {
+	c := 0
+	for i, n1 := range notes {
+		for _, n2 := range notes[:i] {
+			c += complexity(n1.n, n2.n)
 		}
-		ampSum += a1
 	}
-	return
+	return c
 }
 
-func (m *melody) complexity(cSum, ampSum float64, r ratio) float64 {
-	const a1 = 1
-	n1n := r.a * m.history[len(m.history)-1].n
-	for _, n2 := range m.history {
-		a2 := math.Pow(m.coherency, m.time-n2.t)
-		cSum += a1 * a2 * float64(complexity(n1n, n2.n*r.b))
+func (m *melody) complexity(notes []note, cSum int, r ratio) float64 {
+	last := 1
+	for i := len(m.history)-1; i >= 0; i-- {
+		if m.history[i].n != 0 {
+			last = m.history[i].n
+			break
+		}
 	}
-	return cSum / (ampSum + a1)
+	n := r.a * last
+	notes2 := []note{{n: n}}
+	if m.rhythm {
+		notes2 = make([]note, 1 + len(m.history))
+		notes2[len(m.history)] = note{n: n}
+		for i := len(m.history) - 1; i >= 0; i-- {
+			n += m.history[i].n * r.b
+			notes2[i] = note{n: n}
+		}
+	}
+	for i, n1 := range notes2 {
+		for _, n2 := range notes2[:i] {
+			cSum += complexity(n1.n, n2.n)
+		}
+	}
+	for _, n1 := range notes {
+		for _, n2 := range notes2 {
+			cSum += complexity(n1.n*r.b, n2.n)
+		}
+	}
+	return float64(cSum) / float64(len(notes) + len(notes2))
 }
 
 func complexity(a, b int) int {
+	if a == 0 || b == 0 {
+		return 0
+	}
 	c := 0
 	for d := 2; a != b; {
 		d1 := a%d == 0
@@ -169,7 +206,14 @@ func complexity(a, b int) int {
 }
 
 func (m *melody) appendHistory(r ratio) []note {
-	r.a *= m.history[len(m.history)-1].n
+	last := 1
+	for i := len(m.history)-1; i >= 0; i-- {
+		if m.history[i].n != 0 {
+			last = m.history[i].n
+			break
+		}
+	}
+	r.a *= last
 	history := make([]note, len(m.history), len(m.history)+1)
 	for i, n := range m.history {
 		history[i] = note{n.t, n.n * r.b}

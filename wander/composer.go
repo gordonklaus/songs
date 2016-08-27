@@ -13,7 +13,7 @@ type composedNote struct {
 func newComposer() *composer {
 	c := &composer{
 		frequency: newMelody(256, 32),
-		duration:  newMelody(.5, 32),
+		duration:  newRhythm(.5, 32),
 		notes:     make(chan composedNote, 10),
 	}
 	go c.compose()
