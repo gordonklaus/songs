@@ -1,20 +1,18 @@
 package main
 
 type composer struct {
-	frequency melody
-	duration  melody
-	notes     chan composedNote
+	melody *Melody
+	notes  chan composedNote
 }
 
 type composedNote struct {
-	frequency, duration float64
+	duration, frequency float64
 }
 
 func newComposer() *composer {
 	c := &composer{
-		frequency: newMelody(256, 32),
-		duration:  newRhythm(.5, 32),
-		notes:     make(chan composedNote, 10),
+		melody: NewMelody(),
+		notes:  make(chan composedNote, 40),
 	}
 	go c.compose()
 	return c
@@ -22,10 +20,7 @@ func newComposer() *composer {
 
 func (c *composer) compose() {
 	for {
-		f := c.frequency.next()
-		d := c.duration.next()
-		c.frequency.time += d
-		c.duration.time += d
-		c.notes <- composedNote{f, d}
+		d, f := c.melody.Next()
+		c.notes <- composedNote{d, f}
 	}
 }
