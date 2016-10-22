@@ -3,9 +3,9 @@ package main
 import (
 	"math"
 	"math/rand"
+	"sort"
 )
 
-// Melody generates a melody.
 type Melody struct {
 	rhythmBias    float64
 	frequencyBias float64
@@ -23,307 +23,117 @@ type note struct {
 	f int
 }
 
-// NewMelody creates a Melody.
 func NewMelody() *Melody {
 	rhythmComplexity := .85   // 0..1
 	frequencyComplexity := .5 // 0..1
-	avgRate := 1.0
+	avgDuration := 0.5
 	avgFrequency := 256.0
+	coherencyTime := 8.0
+	history := make([]note, int(coherencyTime/avgDuration))
+	for i := range history {
+		history[i] = note{i, 1}
+	}
 	return &Melody{
 		rhythmBias:    math.Log2(rhythmComplexity),
 		frequencyBias: math.Log2(frequencyComplexity),
-		avgDuration:   1 / avgRate,
+		avgDuration:   avgDuration,
 		avgFrequency:  avgFrequency,
-		coherencyTime: 8,
-		lastDuration:  1 / avgRate,
+		coherencyTime: coherencyTime,
+		lastDuration:  avgDuration,
 		lastFrequency: avgFrequency,
-		history:       []note{{0, 1}, {1, 1}, {2, 1}},
+		history:       history,
 	}
 }
 
-// Next generates a new note and returns its duration and frequency.
 func (m *Melody) Next() (float64, float64) {
-	rd := m.newDuration()
-	rf := m.newFrequency()
-	m.appendHistory(rd, rf)
-
-	d, f := m.lastDuration, m.lastFrequency
-	if rd.a == 0 {
-		d = 0
-	}
-	return d, f
-}
-
-type harmony struct {
-	t interval
-	n int
-}
-
-type interval struct {
-	t0, t1 int
-}
-
-func (i interval) overlaps(j interval) bool {
-	return true //i.t0 < j.t1 && j.t0 < i.t1
+	m.appendHistory(m.newDuration(), m.newFrequency())
+	return m.lastDuration, m.lastFrequency
 }
 
 func (m *Melody) newDuration() ratio {
-	// harmonies := make([]harmony, len(m.history)-1)
-	// for i := range harmonies {
-	// 	harmonies[i] = harmony{
-	// 		t: interval{0, 1},
-	// 		n: m.history[i+1].t - m.history[i].t,
-	// 	}
-	// }
-	harmonies := make([]harmony, 0, len(m.history)*(len(m.history)-1)/2)
+	harmonies := make([]int, 0, len(m.history)*(len(m.history)-1)/2)
 	for i, n1 := range m.history {
 		for _, n0 := range m.history[:i] {
-			harmonies = append(harmonies, harmony{
-				t: interval{n0.t, n1.t},
-				n: n1.t - n0.t,
-			})
+			harmonies = append(harmonies, n1.t-n0.t)
 		}
 	}
-	// times := make([]int, len(m.history))
-	// for i, n := range m.history {
-	// 	times[i] = n.t
-	// }
-	// cSum := m.complexitySum3(times)
-
-	cSum := 1 //m.complexitySum(harmonies)
-
-	rats := ratios
-	// rats = append(rats, ratio{0, 1})
-	sum := 0.0
-	sums := make([]float64, len(rats))
-	for i, r := range rats {
-		f := r.float()
-		sum += math.Exp(-m.lastDuration*f/m.avgDuration) * math.Exp2(m.rhythmBias*m.durationComplexity(harmonies, cSum, r))
-		// sum += math.Exp(-m.lastDuration*f/m.avgDuration) * math.Exp2(m.rhythmBias*m.durationComplexity3(times, cSum, r))
-		sums[i] = sum
-	}
-	i := 0
-	x := sum * rand.Float64()
-	for i = range sums {
-		if x < sums[i] {
-			break
-		}
-	}
-
-	if rats[i].a != 0 {
-		m.lastDuration *= rats[i].float()
-	}
-	return rats[i]
+	return selectRatio(func(r ratio) float64 {
+		return math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*m.durationComplexity(harmonies, r))
+	})
 }
 
 func (m *Melody) newFrequency() ratio {
-	harmonies := make([]harmony, len(m.history))
+	harmonies := make([]int, len(m.history))
 	for i, n := range m.history {
-		harmonies[i] = harmony{
-			t: interval{0, 1},
-			n: n.f,
-		}
+		harmonies[i] = n.f
 	}
+	return selectRatio(func(r ratio) float64 {
+		dp := math.Log2(m.lastFrequency * r.float() / m.avgFrequency)
+		return math.Exp2(-dp*dp/2) * math.Exp2(m.frequencyBias*m.frequencyComplexity(harmonies, r))
+	})
+}
 
-	cSum := 1 //m.complexitySum(harmonies)
-
-	rats := ratios
+func selectRatio(complexity func(ratio) float64) ratio {
 	sum := 0.0
-	sums := make([]float64, len(rats))
-	for i, r := range rats {
-		f := r.float()
-		dp := math.Log2(m.lastFrequency * f / m.avgFrequency)
-		sum += math.Exp2(-dp*dp/2) * math.Exp2(m.frequencyBias*m.frequencyComplexity(harmonies, cSum, r))
+	sums := make([]float64, len(ratios))
+	for i, r := range ratios {
+		sum += complexity(r)
 		sums[i] = sum
 	}
-	i := 0
-	x := sum * rand.Float64()
-	for i = range sums {
-		if x < sums[i] {
-			break
-		}
-	}
-
-	m.lastFrequency *= rats[i].float()
-	return rats[i]
+	return ratios[sort.SearchFloat64s(sums, sum*rand.Float64())]
 }
 
-func (m *Melody) complexitySum(harmonies []harmony) int {
-	c := 0
-	for i, h1 := range harmonies {
-		for _, h2 := range harmonies[:i] {
-			if h1.t.overlaps(h2.t) {
-				c += complexity(h1.n, h2.n)
-			}
-		}
-	}
-	return c
-}
-
-func (m *Melody) complexitySum3(times []int) int {
-	c := 0
-	for i1, t1 := range times {
-		for i2, t2 := range times[i1+1:] {
-			for _, t3 := range times[i1+i2+2:] {
-				c += complexity3(t2-t1, t3-t2, t3-t1)
-			}
-		}
-	}
-	return c
-}
-
-func (m *Melody) durationComplexity(harmonies []harmony, cSum int, r ratio) float64 {
-	// last := 1
-	// for i := len(m.history) - 1; i >= 0; i-- {
-	// 	if m.history[i].n != 0 {
-	// 		last = m.history[i].n
-	// 		break
-	// 	}
-	// }
-	harmonies2 := make([]harmony, len(m.history))
+func (m *Melody) durationComplexity(harmonies []int, r ratio) float64 {
+	harmoniesA := make([]int, len(m.history))
 	last := m.history[len(m.history)-1]
 	last2 := m.history[len(m.history)-2]
 	d := r.a * (last.t - last2.t)
-	t1 := last.t*r.b + d
+	t1 := r.b*last.t + d
 	for i, n := range m.history {
-		t0 := n.t * r.b
-		harmonies2[i] = harmony{
-			t: interval{t0, t1},
-			n: t1 - t0,
-		}
+		t0 := r.b * n.t
+		harmoniesA[i] = t1 - t0
 	}
-	cSum = m.complexity(harmonies, harmonies2, cSum, r)
-	n := len(harmonies) + len(harmonies2)
-	n = n * (n - 1) / len(m.history)
-	return float64(cSum) / float64(n)
+	return m.complexity(harmonies, harmoniesA, r.b)
 }
 
-func (m *Melody) durationComplexity3(times []int, cSum int, r ratio) float64 {
-	// last := 1
-	// for i := len(m.history) - 1; i >= 0; i-- {
-	// 	if m.history[i].n != 0 {
-	// 		last = m.history[i].n
-	// 		break
-	// 	}
-	// }
-	last := times[len(times)-1]
-	last2 := times[len(times)-2]
-	d := r.a * (last - last2)
-	t3 := last*r.b + d
-	for i1, t1 := range times {
-		for _, t2 := range times[i1+1:] {
-			cSum += complexity3(t3-t2*r.b, (t2-t1)*r.b, t3-t1*r.b)
-		}
-	}
-	n := len(times) + 1
-	n = n * (n - 1) / 3
-	return float64(cSum) / float64(n)
+func (m *Melody) frequencyComplexity(harmonies []int, r ratio) float64 {
+	harmoniesA := []int{r.a * harmonies[len(harmonies)-1]}
+	return m.complexity(harmonies, harmoniesA, r.b)
 }
 
-func (m *Melody) frequencyComplexity(harmonies []harmony, cSum int, r ratio) float64 {
-	n := r.a * harmonies[len(harmonies)-1].n
-	harmonies2 := []harmony{{t: interval{0, 1}, n: n}}
-	cSum = m.complexity(harmonies, harmonies2, cSum, r)
-	n = len(harmonies) + len(harmonies2)
-	n = n * (n - 1) / len(m.history)
-	return float64(cSum) / float64(n)
-}
-
-func (m *Melody) complexity(harmonies, harmonies2 []harmony, cSum int, r ratio) int {
-	for i, h1 := range harmonies2 {
-		for _, h2 := range harmonies2[:i] {
-			if h1.t.overlaps(h2.t) {
-				cSum += complexity(h1.n, h2.n)
-			}
+func (m *Melody) complexity(harmonies, harmoniesA []int, b int) float64 {
+	c := 0
+	for i, h1 := range harmoniesA {
+		for _, h2 := range harmoniesA[:i] {
+			c += complexity(h1, h2)
 		}
 	}
 	for _, h1 := range harmonies {
-		t1 := h1.t
-		if true { // should only be done for rhythm, but ok because intervals are hacked to (0, 1) for frequencies
-			t1.t0 *= r.b
-			t1.t1 *= r.b
-		}
-		for _, h2 := range harmonies2 {
-			if t1.overlaps(h2.t) {
-				cSum += complexity(h1.n*r.b, h2.n)
-			}
+		for _, h2 := range harmoniesA {
+			c += complexity(h1*b, h2)
 		}
 	}
-	return cSum
-}
-
-func complexity(a, b int) int {
-	if a == 0 || b == 0 {
-		return 0
-	}
-	c := 0
-	for d := 2; a != b; {
-		d1 := a%d == 0
-		d2 := b%d == 0
-		if d1 != d2 {
-			c += d - 1
-		}
-		if d1 {
-			a /= d
-		}
-		if d2 {
-			b /= d
-		}
-		if !(d1 || d2) {
-			d++
-		}
-	}
-	return c
-}
-
-func complexity3(a, b, z int) int {
-	if a == 0 || b == 0 || z == 0 {
-		return 0
-	}
-	c := 0
-	for d := 2; a != b && a != z && b != z; {
-		d1 := a%d == 0
-		d2 := b%d == 0
-		d3 := z%d == 0
-		if (d1 || d2 || d3) && !(d1 && d2 && d3) {
-			c += d - 1
-		}
-		if d1 {
-			a /= d
-		}
-		if d2 {
-			b /= d
-		}
-		if d3 {
-			z /= d
-		}
-		if !(d1 || d2 || d3) {
-			d++
-		}
-	}
-	return c
+	n := len(harmonies) + len(harmoniesA)
+	n = n * (n - 1) / len(m.history)
+	return float64(c) / float64(n)
 }
 
 func (m *Melody) appendHistory(rd, rf ratio) {
-	// last := 1
-	// for i := len(m.history) - 1; i >= 0; i-- {
-	// 	if m.history[i].n != 0 {
-	// 		last = m.history[i].n
-	// 		break
-	// 	}
-	// }
-	last := m.history[len(m.history)-1]  // Copy the last note before it is modified.
-	last2 := m.history[len(m.history)-2] // Copy the last note before it is modified.
+	last := m.history[len(m.history)-1]
+	last2 := m.history[len(m.history)-2]
 	for i := range m.history {
 		m.history[i].t *= rd.b
 		m.history[i].f *= rf.b
 	}
 	d := rd.a * (last.t - last2.t)
-	t1 := last.t*rd.b + d
+	t1 := rd.b*last.t + d
 	m.history = append(m.history, note{
 		t: t1,
 		f: rf.a * last.f,
 	})
+
+	m.lastDuration *= rd.float()
+	m.lastFrequency *= rf.float()
 
 	for i, n := range m.history[:len(m.history)-2] {
 		r := ratio{t1 - n.t, d}
@@ -333,19 +143,47 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 		}
 	}
 
-	div := m.history[0]
-	t0 := div.t
-	div.t = 0
+	t0 := m.history[0].t
 	for i := range m.history {
-		n := &m.history[i]
-		n.t -= t0
-		div.t = gcd(div.t, n.t)
-		div.f = gcd(div.f, n.f)
+		m.history[i].t -= t0
+	}
+
+	td, fd := 0, 0
+	for _, n := range m.history {
+		td = gcd(td, n.t)
+		fd = gcd(fd, n.f)
 	}
 	for i := range m.history {
-		m.history[i].t /= div.t
-		m.history[i].f /= div.f
+		m.history[i].t /= td
+		m.history[i].f /= fd
 	}
+}
+
+var complexityCache = map[int]int{}
+
+func complexity(a, b int) int {
+	if a == b || a == 0 || b == 0 {
+		return 0
+	}
+	d := gcd(a, b)
+	d *= d
+	n := a * b / d
+	if c, ok := complexityCache[n]; ok {
+		return c
+	}
+	c := 0
+	for m, d := 1, 2; m != n; d++ {
+		for {
+			md := m * d
+			if n%md != 0 {
+				break
+			}
+			m = md
+			c += d - 1
+		}
+	}
+	complexityCache[n] = c
+	return c
 }
 
 func gcd(a, b int) int {
