@@ -16,24 +16,26 @@ type Melody struct {
 	lastDuration  float64
 	lastFrequency float64
 	history       []note
+	nextDuration  []ratioComplexity
+	nextFrequency []ratioComplexity
 }
 
 type note struct {
-	t int
-	f int
+	t, f ratio
+}
+
+type ratioComplexity struct {
+	r ratio
+	c int
 }
 
 func NewMelody() *Melody {
-	rhythmComplexity := .85   // 0..1
+	rhythmComplexity := .8    // 0..1
 	frequencyComplexity := .5 // 0..1
 	avgDuration := 0.5
 	avgFrequency := 256.0
 	coherencyTime := 8.0
-	history := make([]note, int(coherencyTime/avgDuration))
-	for i := range history {
-		history[i] = note{i, 1}
-	}
-	return &Melody{
+	m := &Melody{
 		rhythmBias:    math.Log2(rhythmComplexity),
 		frequencyBias: math.Log2(frequencyComplexity),
 		avgDuration:   avgDuration,
@@ -41,8 +43,11 @@ func NewMelody() *Melody {
 		coherencyTime: coherencyTime,
 		lastDuration:  avgDuration,
 		lastFrequency: avgFrequency,
-		history:       history,
 	}
+	for i := 0; i < int(coherencyTime/avgDuration); i++ {
+		m.appendHistory(ratio{1, 1}, ratio{1, 1})
+	}
+	return m
 }
 
 func (m *Melody) Next() (float64, float64) {
@@ -51,112 +56,261 @@ func (m *Melody) Next() (float64, float64) {
 }
 
 func (m *Melody) newDuration() ratio {
-	harmonies := make([]int, 0, len(m.history)*(len(m.history)-1)/2)
-	for i, n1 := range m.history {
-		for _, n0 := range m.history[:i] {
-			harmonies = append(harmonies, n1.t-n0.t)
-		}
-	}
-	return selectRatio(func(r ratio) float64 {
-		return math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*m.durationComplexity(harmonies, r))
+	return selectRatio(m.nextDuration, func(rc ratioComplexity) float64 {
+		n := len(m.history)
+		n = n * (n + 1) / 2
+		n = n * (n - 1) / len(m.history)
+		c := float64(rc.c) / float64(n)
+		return math.Exp(-m.lastDuration*rc.r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*c)
 	})
 }
 
 func (m *Melody) newFrequency() ratio {
-	harmonies := make([]int, len(m.history))
-	for i, n := range m.history {
-		harmonies[i] = n.f
-	}
-	return selectRatio(func(r ratio) float64 {
-		dp := math.Log2(m.lastFrequency * r.float() / m.avgFrequency)
-		return math.Exp2(-dp*dp/2) * math.Exp2(m.frequencyBias*m.frequencyComplexity(harmonies, r))
+	return selectRatio(m.nextFrequency, func(rc ratioComplexity) float64 {
+		n := len(m.history)
+		n = n * (n + 1) / len(m.history)
+		c := float64(rc.c) / float64(n)
+		dp := math.Log2(m.lastFrequency * rc.r.float() / m.avgFrequency)
+		return math.Exp2(-dp*dp/2) * math.Exp2(m.frequencyBias*c)
 	})
 }
 
-func selectRatio(complexity func(ratio) float64) ratio {
+func selectRatio(candidates []ratioComplexity, weight func(ratioComplexity) float64) ratio {
 	sum := 0.0
-	sums := make([]float64, len(ratios))
-	for i, r := range ratios {
-		sum += complexity(r)
+	sums := make([]float64, len(candidates))
+	for i, rc := range candidates {
+		sum += weight(rc)
 		sums[i] = sum
 	}
-	return ratios[sort.SearchFloat64s(sums, sum*rand.Float64())]
-}
-
-func (m *Melody) durationComplexity(harmonies []int, r ratio) float64 {
-	harmoniesA := make([]int, len(m.history))
-	last := m.history[len(m.history)-1]
-	last2 := m.history[len(m.history)-2]
-	d := r.a * (last.t - last2.t)
-	t1 := r.b*last.t + d
-	for i, n := range m.history {
-		t0 := r.b * n.t
-		harmoniesA[i] = t1 - t0
-	}
-	return m.complexity(harmonies, harmoniesA, r.b)
-}
-
-func (m *Melody) frequencyComplexity(harmonies []int, r ratio) float64 {
-	harmoniesA := []int{r.a * harmonies[len(harmonies)-1]}
-	return m.complexity(harmonies, harmoniesA, r.b)
-}
-
-func (m *Melody) complexity(harmonies, harmoniesA []int, b int) float64 {
-	c := 0
-	for i, h1 := range harmoniesA {
-		for _, h2 := range harmoniesA[:i] {
-			c += complexity(h1, h2)
-		}
-	}
-	for _, h1 := range harmonies {
-		for _, h2 := range harmoniesA {
-			c += complexity(h1*b, h2)
-		}
-	}
-	n := len(harmonies) + len(harmoniesA)
-	n = n * (n - 1) / len(m.history)
-	return float64(c) / float64(n)
+	return candidates[sort.SearchFloat64s(sums, sum*rand.Float64())].r
 }
 
 func (m *Melody) appendHistory(rd, rf ratio) {
-	last := m.history[len(m.history)-1]
-	last2 := m.history[len(m.history)-2]
-	for i := range m.history {
-		m.history[i].t *= rd.b
-		m.history[i].f *= rf.b
-	}
-	d := rd.a * (last.t - last2.t)
-	t1 := rd.b*last.t + d
-	m.history = append(m.history, note{
-		t: t1,
-		f: rf.a * last.f,
-	})
-
-	m.lastDuration *= rd.float()
-	m.lastFrequency *= rf.float()
-
-	for i, n := range m.history[:len(m.history)-2] {
-		r := ratio{t1 - n.t, d}
-		if m.lastDuration*r.float() < m.coherencyTime {
-			m.history = m.history[i:]
+	for i, dc := range m.nextDuration {
+		if !dc.r.lessThan(rd) && dc.r != rd {
+			m.nextDuration = m.nextDuration[i:]
 			break
 		}
 	}
 
-	t0 := m.history[0].t
-	for i := range m.history {
-		m.history[i].t -= t0
+	histlen := len(m.history) - 2
+	if histlen < 0 {
+		histlen = 0
+	}
+	for _, n := range m.history[:histlen] {
+		if rd.float()-n.t.float()*m.lastDuration <= m.coherencyTime {
+			break
+		}
+
+		for i := range m.nextDuration {
+			dc := &m.nextDuration[i]
+			dc.c -= m.firstDurationComplexity(dc.r)
+		}
+		for i := range m.nextFrequency {
+			fc := &m.nextFrequency[i]
+			fc.c -= m.firstFrequencyComplexity(fc.r)
+		}
+
+		m.history = m.history[1:]
 	}
 
-	td, fd := 0, 0
-	for _, n := range m.history {
-		td = gcd(td, n.t)
-		fd = gcd(fd, n.f)
-	}
+	m.history = append(m.history, note{
+		t: rd,
+		f: rf,
+	})
 	for i := range m.history {
-		m.history[i].t /= td
-		m.history[i].f /= fd
+		n := &m.history[i]
+		n.t = n.t.sub(rd).div(rd)
+		n.f = n.f.div(rf)
 	}
+	m.lastDuration *= rd.float()
+	m.lastFrequency *= rf.float()
+	// fmt.Println(rd, "---", m.history)
+
+	for i := range m.nextDuration {
+		dc := &m.nextDuration[i]
+		dc.r = dc.r.sub(rd).div(rd)
+	}
+	for i := range m.nextFrequency {
+		fc := &m.nextFrequency[i]
+		fc.r = fc.r.div(rf)
+	}
+
+	for i := range m.nextDuration {
+		dc := &m.nextDuration[i]
+		dc.c += m.nextDurationComplexity(dc.r)
+	}
+	for i := range m.nextFrequency {
+		fc := &m.nextFrequency[i]
+		fc.c += m.nextFrequencyComplexity(fc.r)
+	}
+
+	// for _, dc := range m.nextDuration {
+	// 	if c := m.durationComplexity(dc.r); c != dc.c {
+	// 		print(c-dc.c, ", ")
+	// 	} else {
+	// 		// print("|")
+	// 	}
+	// }
+	nextDuration := []ratioComplexity{}
+	ir := 0
+	for _, dc := range m.nextDuration {
+		for ; ir < len(ratios) && ratios[ir].lessThan(dc.r); ir++ {
+			r := ratios[ir]
+			nextDuration = append(nextDuration, ratioComplexity{r, m.durationComplexity(r)})
+		}
+		if ir == len(ratios) || ratios[ir] != dc.r {
+			nextDuration = append(nextDuration, dc)
+		}
+	}
+	for ; ir < len(ratios); ir++ {
+		r := ratios[ir]
+		nextDuration = append(nextDuration, ratioComplexity{r, m.durationComplexity(r)})
+	}
+	m.nextDuration = trim(nextDuration)
+
+	nextFrequency := []ratioComplexity{}
+	ir = 0
+	for _, fc := range m.nextFrequency {
+		for ; ir < len(ratios) && ratios[ir].lessThan(fc.r); ir++ {
+			r := ratios[ir]
+			nextFrequency = append(nextFrequency, ratioComplexity{r, m.frequencyComplexity(r)})
+		}
+		if ir == len(ratios) || ratios[ir] != fc.r {
+			nextFrequency = append(nextFrequency, fc)
+		}
+	}
+	for ; ir < len(ratios); ir++ {
+		r := ratios[ir]
+		nextFrequency = append(nextFrequency, ratioComplexity{r, m.frequencyComplexity(r)})
+	}
+	m.nextFrequency = trim(nextFrequency)
+
+	// fmt.Println(len(m.nextDuration), len(m.nextFrequency))
+	// TODO: discard nextDuration, nextFrequency with too high complexity?
+}
+
+func trim(cs []ratioComplexity) []ratioComplexity {
+	median := medianOfFive(fiveRandom(cs))
+	i := 0
+	for _, rc := range cs {
+		if rc.c < median {
+			cs[i] = rc
+			i++
+		}
+	}
+	return cs[:i]
+}
+
+func medianOfFive(a, b, c, d, e ratioComplexity) int {
+	if b.c < a.c {
+		a, b = b, a
+	}
+	if c.c < a.c {
+		a, c = c, a
+	}
+	if d.c < a.c {
+		a, d = d, a
+	}
+	if e.c < a.c {
+		a, e = e, a
+	}
+
+	if c.c < b.c {
+		b, c = c, b
+	}
+	if d.c < b.c {
+		b, d = d, b
+	}
+	if e.c < b.c {
+		b, e = e, b
+	}
+
+	if d.c < c.c {
+		c, d = d, c
+	}
+	if e.c < c.c {
+		c, e = e, c
+	}
+	return c.c
+}
+
+func fiveRandom(cs []ratioComplexity) (a, b, c, d, e ratioComplexity) {
+	n := len(cs)
+	return cs[rand.Intn(n)], cs[rand.Intn(n)], cs[rand.Intn(n)], cs[rand.Intn(n)], cs[rand.Intn(n)]
+}
+
+func (m *Melody) firstDurationComplexity(next ratio) int {
+	c := 0
+	d := next.sub(m.history[0].t)
+	for i, n1 := range m.history {
+		for _, n0 := range m.history[:i] {
+			r := n1.t.sub(n0.t).div(d)
+			c += complexity(r.a, r.b)
+		}
+	}
+	n0 := m.history[0]
+	for _, n1 := range m.history[1:] { // Start at 1 to avoid d1 == 0.
+		d1 := n1.t.sub(n0.t)
+		for _, n2 := range m.history[1:] { // Start at 1 because we already counted the first one above.
+			d2 := next.sub(n2.t)
+			r := d2.div(d1)
+			c += complexity(r.a, r.b)
+		}
+	}
+	return c
+}
+
+func (m *Melody) firstFrequencyComplexity(next ratio) int {
+	r := next.div(m.history[0].f)
+	return complexity(r.a, r.b)
+}
+
+func (m *Melody) durationComplexity(next ratio) int {
+	c := 0
+	for i, n1 := range m.history {
+		for _, n0 := range m.history[:i] {
+			d1 := n1.t.sub(n0.t)
+			for _, n2 := range m.history {
+				d2 := next.sub(n2.t)
+				r := d2.div(d1)
+				c += complexity(r.a, r.b)
+			}
+		}
+	}
+	return c
+}
+
+func (m *Melody) frequencyComplexity(next ratio) int {
+	c := 0
+	for _, n := range m.history {
+		r := next.div(n.f)
+		c += complexity(r.a, r.b)
+	}
+	return c
+}
+
+func (m *Melody) nextDurationComplexity(next ratio) int {
+	c := 0
+	for i, n1 := range m.history {
+		for _, n0 := range m.history[:i] {
+			r := n1.t.sub(n0.t).div(next)
+			c += complexity(r.a, r.b)
+		}
+	}
+	for _, n1 := range m.history[:len(m.history)-1] { // Stop at len-1 to avoid d1 == 0.
+		d1 := ratio{0, 1}.sub(n1.t)
+		for _, n2 := range m.history[:len(m.history)-1] { // Stop at len-1 because we already counted the last one above.
+			d2 := next.sub(n2.t)
+			r := d2.div(d1)
+			c += complexity(r.a, r.b)
+		}
+	}
+	return c
+}
+
+func (m *Melody) nextFrequencyComplexity(next ratio) int {
+	return complexity(next.a, next.b)
 }
 
 var complexityCache = map[int]int{}
@@ -200,6 +354,38 @@ type ratio struct {
 	a, b int
 }
 
+func (r ratio) normalized() ratio {
+	neg := false
+	if r.a < 0 {
+		r.a = -r.a
+		neg = !neg
+	}
+	if r.b < 0 {
+		r.b = -r.b
+		neg = !neg
+	}
+	d := gcd(r.a, r.b)
+	r.a /= d
+	r.b /= d
+	if neg {
+		r.a = -r.a
+	}
+	return r
+}
+
+func (r ratio) sub(s ratio) ratio {
+	d := r.b * s.b
+	return ratio{r.a*s.b - s.a*r.b, d}.normalized()
+}
+
+func (r ratio) div(s ratio) ratio {
+	return ratio{r.a * s.b, r.b * s.a}.normalized()
+}
+
+func (r ratio) lessThan(s ratio) bool {
+	return r.a*s.b < r.b*s.a
+}
+
 func (r ratio) float() float64 { return float64(r.a) / float64(r.b) }
 
 var ratios []ratio
@@ -235,4 +421,11 @@ func init() {
 			}
 		}
 	}
+	sort.Sort(ratiosAscending(ratios))
 }
+
+type ratiosAscending []ratio
+
+func (r ratiosAscending) Len() int           { return len(r) }
+func (r ratiosAscending) Less(i, j int) bool { return r[i].lessThan(r[j]) }
+func (r ratiosAscending) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
