@@ -98,7 +98,7 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 		histlen = 0
 	}
 	for _, n := range m.history[:histlen] {
-		if rd.float()-n.t.float()*m.lastDuration <= m.coherencyTime {
+		if (rd.float()-n.t.float())*m.lastDuration <= m.coherencyTime {
 			break
 		}
 
