@@ -120,8 +120,8 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	})
 	for i := range m.history {
 		n := &m.history[i]
-		n.t = n.t.sub(rd).div(rd)
-		n.f = n.f.div(rf)
+		n.t = n.t.sub(rd).div(rd).normalized()
+		n.f = n.f.div(rf).normalized()
 	}
 	m.lastDuration *= rd.float()
 	m.lastFrequency *= rf.float()
@@ -129,11 +129,11 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 
 	for i := range m.nextDuration {
 		dc := &m.nextDuration[i]
-		dc.r = dc.r.sub(rd).div(rd)
+		dc.r = dc.r.sub(rd).div(rd).normalized()
 	}
 	for i := range m.nextFrequency {
 		fc := &m.nextFrequency[i]
-		fc.r = fc.r.div(rf)
+		fc.r = fc.r.div(rf).normalized()
 	}
 
 	for i := range m.nextDuration {
@@ -341,11 +341,11 @@ func complexity(a, b int) int {
 }
 
 func gcd(a, b int) int {
+	if a > b {
+		a, b = b, a
+	}
 	for a > 0 {
-		if a > b {
-			a, b = b, a
-		}
-		b -= a
+		a, b = b%a, a
 	}
 	return b
 }
@@ -375,11 +375,11 @@ func (r ratio) normalized() ratio {
 
 func (r ratio) sub(s ratio) ratio {
 	d := r.b * s.b
-	return ratio{r.a*s.b - s.a*r.b, d}.normalized()
+	return ratio{r.a*s.b - s.a*r.b, d}
 }
 
 func (r ratio) div(s ratio) ratio {
-	return ratio{r.a * s.b, r.b * s.a}.normalized()
+	return ratio{r.a * s.b, r.b * s.a}
 }
 
 func (r ratio) lessThan(s ratio) bool {
