@@ -38,7 +38,7 @@ func (s *song) beat() {
 
 func (s *song) Sing() float64 {
 	s.EventDelay.Step()
-	x := audio.Saturate(s.MultiVoice.Sing())
+	x := audio.Saturate(s.MultiVoice.Sing()/2) / 2
 	return audio.Saturate((2*x + s.Reverb.Filter(x)) / 3)
 }
 

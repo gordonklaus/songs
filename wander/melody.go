@@ -32,7 +32,7 @@ type ratioComplexity struct {
 func NewMelody() *Melody {
 	rhythmComplexity := .8    // 0..1
 	frequencyComplexity := .5 // 0..1
-	avgDuration := 0.25
+	avgDuration := 0.5
 	avgFrequency := 256.0
 	coherencyTime := 8.0
 	m := &Melody{
@@ -51,7 +51,11 @@ func NewMelody() *Melody {
 }
 
 func (m *Melody) Next() (float64, float64) {
-	m.appendHistory(m.newDuration(), m.newFrequency())
+	rd := m.newDuration()
+	m.appendHistory(rd, m.newFrequency())
+	if rd.a == 0 {
+		return 0, m.lastFrequency
+	}
 	return m.lastDuration, m.lastFrequency
 }
 
@@ -87,7 +91,7 @@ func selectRatio(candidates []ratioComplexity, weight func(ratioComplexity) floa
 
 func (m *Melody) appendHistory(rd, rf ratio) {
 	for i, dc := range m.nextDuration {
-		if !dc.r.lessThan(rd) && dc.r != rd {
+		if !dc.r.lessThan(rd) {
 			m.nextDuration = m.nextDuration[i:]
 			break
 		}
@@ -120,16 +124,22 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	})
 	for i := range m.history {
 		n := &m.history[i]
-		n.t = n.t.sub(rd).div(rd).normalized()
+		if rd.a > 0 {
+			n.t = n.t.sub(rd).div(rd).normalized()
+		}
 		n.f = n.f.div(rf).normalized()
 	}
-	m.lastDuration *= rd.float()
+	if rd.a > 0 {
+		m.lastDuration *= rd.float()
+	}
 	m.lastFrequency *= rf.float()
 	// fmt.Println(rd, "---", m.history)
 
-	for i := range m.nextDuration {
-		dc := &m.nextDuration[i]
-		dc.r = dc.r.sub(rd).div(rd).normalized()
+	if rd.a > 0 {
+		for i := range m.nextDuration {
+			dc := &m.nextDuration[i]
+			dc.r = dc.r.sub(rd).div(rd).normalized()
+		}
 	}
 	for i := range m.nextFrequency {
 		fc := &m.nextFrequency[i]
@@ -152,7 +162,9 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	// 		// print("|")
 	// 	}
 	// }
-	m.nextDuration = addNext(m.nextDuration, m.durationComplexity)
+	if rd.a > 0 {
+		m.nextDuration = addNext(m.nextDuration, m.durationComplexity)
+	}
 	m.nextFrequency = addNext(m.nextFrequency, m.frequencyComplexity)
 
 	// fmt.Println(len(m.nextDuration), len(m.nextFrequency))
