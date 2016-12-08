@@ -152,43 +152,30 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	// 		// print("|")
 	// 	}
 	// }
-	nextDuration := []ratioComplexity{}
-	ir := 0
-	for _, dc := range m.nextDuration {
-		for ; ir < len(ratios) && ratios[ir].lessThan(dc.r); ir++ {
-			r := ratios[ir]
-			nextDuration = append(nextDuration, ratioComplexity{r, m.durationComplexity(r)})
-		}
-		if ir < len(ratios) && ratios[ir] == dc.r {
-			ir++
-		}
-		nextDuration = append(nextDuration, dc)
-	}
-	for ; ir < len(ratios); ir++ {
-		r := ratios[ir]
-		nextDuration = append(nextDuration, ratioComplexity{r, m.durationComplexity(r)})
-	}
-	m.nextDuration = nextDuration
-
-	nextFrequency := []ratioComplexity{}
-	ir = 0
-	for _, fc := range m.nextFrequency {
-		for ; ir < len(ratios) && ratios[ir].lessThan(fc.r); ir++ {
-			r := ratios[ir]
-			nextFrequency = append(nextFrequency, ratioComplexity{r, m.frequencyComplexity(r)})
-		}
-		if ir < len(ratios) && ratios[ir] == fc.r {
-			ir++
-		}
-		nextFrequency = append(nextFrequency, fc)
-	}
-	for ; ir < len(ratios); ir++ {
-		r := ratios[ir]
-		nextFrequency = append(nextFrequency, ratioComplexity{r, m.frequencyComplexity(r)})
-	}
-	m.nextFrequency = nextFrequency
+	m.nextDuration = addNext(m.nextDuration, m.durationComplexity)
+	m.nextFrequency = addNext(m.nextFrequency, m.frequencyComplexity)
 
 	// fmt.Println(len(m.nextDuration), len(m.nextFrequency))
+}
+
+func addNext(rcs []ratioComplexity, complexity func(ratio) int) []ratioComplexity {
+	ret := []ratioComplexity{}
+	ir := 0
+	for _, rc := range rcs {
+		for ; ir < len(ratios) && ratios[ir].lessThan(rc.r); ir++ {
+			r := ratios[ir]
+			ret = append(ret, ratioComplexity{r, complexity(r)})
+		}
+		if ir < len(ratios) && ratios[ir] == rc.r {
+			ir++
+		}
+		ret = append(ret, rc)
+	}
+	for ; ir < len(ratios); ir++ {
+		r := ratios[ir]
+		ret = append(ret, ratioComplexity{r, complexity(r)})
+	}
+	return ret
 }
 
 func (m *Melody) firstDurationComplexity(next ratio) int {
