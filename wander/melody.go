@@ -32,7 +32,7 @@ type ratioComplexity struct {
 func NewMelody() *Melody {
 	rhythmComplexity := .8    // 0..1
 	frequencyComplexity := .5 // 0..1
-	avgDuration := 0.5
+	avgDuration := 0.25
 	avgFrequency := 256.0
 	coherencyTime := 8.0
 	m := &Melody{
@@ -159,15 +159,16 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 			r := ratios[ir]
 			nextDuration = append(nextDuration, ratioComplexity{r, m.durationComplexity(r)})
 		}
-		if ir == len(ratios) || ratios[ir] != dc.r {
-			nextDuration = append(nextDuration, dc)
+		if ir < len(ratios) && ratios[ir] == dc.r {
+			ir++
 		}
+		nextDuration = append(nextDuration, dc)
 	}
 	for ; ir < len(ratios); ir++ {
 		r := ratios[ir]
 		nextDuration = append(nextDuration, ratioComplexity{r, m.durationComplexity(r)})
 	}
-	m.nextDuration = trim(nextDuration)
+	m.nextDuration = nextDuration
 
 	nextFrequency := []ratioComplexity{}
 	ir = 0
@@ -176,68 +177,18 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 			r := ratios[ir]
 			nextFrequency = append(nextFrequency, ratioComplexity{r, m.frequencyComplexity(r)})
 		}
-		if ir == len(ratios) || ratios[ir] != fc.r {
-			nextFrequency = append(nextFrequency, fc)
+		if ir < len(ratios) && ratios[ir] == fc.r {
+			ir++
 		}
+		nextFrequency = append(nextFrequency, fc)
 	}
 	for ; ir < len(ratios); ir++ {
 		r := ratios[ir]
 		nextFrequency = append(nextFrequency, ratioComplexity{r, m.frequencyComplexity(r)})
 	}
-	m.nextFrequency = trim(nextFrequency)
+	m.nextFrequency = nextFrequency
 
 	// fmt.Println(len(m.nextDuration), len(m.nextFrequency))
-	// TODO: discard nextDuration, nextFrequency with too high complexity?
-}
-
-func trim(cs []ratioComplexity) []ratioComplexity {
-	median := medianOfFive(fiveRandom(cs))
-	i := 0
-	for _, rc := range cs {
-		if rc.c < median {
-			cs[i] = rc
-			i++
-		}
-	}
-	return cs[:i]
-}
-
-func medianOfFive(a, b, c, d, e ratioComplexity) int {
-	if b.c < a.c {
-		a, b = b, a
-	}
-	if c.c < a.c {
-		a, c = c, a
-	}
-	if d.c < a.c {
-		a, d = d, a
-	}
-	if e.c < a.c {
-		a, e = e, a
-	}
-
-	if c.c < b.c {
-		b, c = c, b
-	}
-	if d.c < b.c {
-		b, d = d, b
-	}
-	if e.c < b.c {
-		b, e = e, b
-	}
-
-	if d.c < c.c {
-		c, d = d, c
-	}
-	if e.c < c.c {
-		c, e = e, c
-	}
-	return c.c
-}
-
-func fiveRandom(cs []ratioComplexity) (a, b, c, d, e ratioComplexity) {
-	n := len(cs)
-	return cs[rand.Intn(n)], cs[rand.Intn(n)], cs[rand.Intn(n)], cs[rand.Intn(n)], cs[rand.Intn(n)]
 }
 
 func (m *Melody) firstDurationComplexity(next ratio) int {
