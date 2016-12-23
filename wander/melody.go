@@ -18,6 +18,8 @@ type Melody struct {
 	history       []note
 	nextDuration  []ratioComplexity
 	nextFrequency []ratioComplexity
+
+	times []timeMultiplicity
 }
 
 type note struct {
@@ -29,10 +31,15 @@ type ratioComplexity struct {
 	c int
 }
 
+type timeMultiplicity struct {
+	t ratio
+	m int
+}
+
 func NewMelody() *Melody {
 	rhythmComplexity := .8    // 0..1
 	frequencyComplexity := .5 // 0..1
-	avgDuration := 0.5
+	avgDuration := 0.25
 	avgFrequency := 256.0
 	coherencyTime := 8.0
 	m := &Melody{
@@ -90,8 +97,16 @@ func selectRatio(candidates []ratioComplexity, weight func(ratioComplexity) floa
 }
 
 func (m *Melody) appendHistory(rd, rf ratio) {
+	lastSimulCount := 0
+	for i := len(m.history) - 1; i >= 0; i-- {
+		if m.history[i].t.a != 0 {
+			break
+		}
+		lastSimulCount++
+	}
+
 	for i, dc := range m.nextDuration {
-		if !dc.r.lessThan(rd) {
+		if rd.lessThan(dc.r) || (dc.r == rd && lastSimulCount < 5) {
 			m.nextDuration = m.nextDuration[i:]
 			break
 		}
@@ -105,6 +120,18 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 		if (rd.float()-n.t.float())*m.lastDuration <= m.coherencyTime {
 			break
 		}
+
+		m.times = nil
+		var prev *timeMultiplicity
+		for i, n := range m.history {
+			if i != 1 && prev != nil && n.t == prev.t {
+				prev.m++
+			} else {
+				m.times = append(m.times, timeMultiplicity{n.t, 1})
+				prev = &m.times[len(m.times)-1]
+			}
+		}
+		// fmt.Println(len(m.history), len(m.times), len(m.nextDuration))
 
 		for i := range m.nextDuration {
 			dc := &m.nextDuration[i]
@@ -145,6 +172,18 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 		fc := &m.nextFrequency[i]
 		fc.r = fc.r.div(rf).normalized()
 	}
+
+	m.times = nil
+	var prev *timeMultiplicity
+	for i, n := range m.history {
+		if i != len(m.history)-1 && prev != nil && n.t == prev.t {
+			prev.m++
+		} else {
+			m.times = append(m.times, timeMultiplicity{n.t, 1})
+			prev = &m.times[len(m.times)-1]
+		}
+	}
+	// fmt.Println(len(m.history), len(m.times), len(m.nextDuration))
 
 	for i := range m.nextDuration {
 		dc := &m.nextDuration[i]
@@ -192,20 +231,20 @@ func addNext(rcs []ratioComplexity, complexity func(ratio) int) []ratioComplexit
 
 func (m *Melody) firstDurationComplexity(next ratio) int {
 	c := 0
-	d := next.sub(m.history[0].t)
-	for i, n1 := range m.history {
-		for _, n0 := range m.history[:i] {
+	d := next.sub(m.times[0].t)
+	for i, n1 := range m.times {
+		for _, n0 := range m.times[:i] {
 			r := n1.t.sub(n0.t).div(d)
-			c += complexity(r.a, r.b)
+			c += n1.m * n0.m * complexity(r.a, r.b)
 		}
 	}
-	n0 := m.history[0]
-	for _, n1 := range m.history[1:] { // Start at 1 to avoid d1 == 0.
+	n0 := m.times[0]
+	for _, n1 := range m.times {
 		d1 := n1.t.sub(n0.t)
-		for _, n2 := range m.history[1:] { // Start at 1 because we already counted the first one above.
+		for _, n2 := range m.times[1:] { // Start at 1 because we already counted the first one above.
 			d2 := next.sub(n2.t)
 			r := d2.div(d1)
-			c += complexity(r.a, r.b)
+			c += n1.m * n2.m * complexity(r.a, r.b)
 		}
 	}
 	return c
@@ -218,13 +257,14 @@ func (m *Melody) firstFrequencyComplexity(next ratio) int {
 
 func (m *Melody) durationComplexity(next ratio) int {
 	c := 0
-	for i, n1 := range m.history {
-		for _, n0 := range m.history[:i] {
+	for i, n1 := range m.times {
+		for _, n0 := range m.times[:i] {
 			d1 := n1.t.sub(n0.t)
-			for _, n2 := range m.history {
+			m1 := n1.m * n0.m
+			for _, n2 := range m.times {
 				d2 := next.sub(n2.t)
 				r := d2.div(d1)
-				c += complexity(r.a, r.b)
+				c += m1 * n2.m * complexity(r.a, r.b)
 			}
 		}
 	}
@@ -242,18 +282,18 @@ func (m *Melody) frequencyComplexity(next ratio) int {
 
 func (m *Melody) nextDurationComplexity(next ratio) int {
 	c := 0
-	for i, n1 := range m.history {
-		for _, n0 := range m.history[:i] {
+	for i, n1 := range m.times {
+		for _, n0 := range m.times[:i] {
 			r := n1.t.sub(n0.t).div(next)
-			c += complexity(r.a, r.b)
+			c += n1.m * n0.m * complexity(r.a, r.b)
 		}
 	}
-	for _, n1 := range m.history[:len(m.history)-1] { // Stop at len-1 to avoid d1 == 0.
+	for _, n1 := range m.times {
 		d1 := ratio{0, 1}.sub(n1.t)
-		for _, n2 := range m.history[:len(m.history)-1] { // Stop at len-1 because we already counted the last one above.
+		for _, n2 := range m.times[:len(m.times)-1] { // Stop at len-1 because we already counted the last one above.
 			d2 := next.sub(n2.t)
 			r := d2.div(d1)
-			c += complexity(r.a, r.b)
+			c += n1.m * n2.m * complexity(r.a, r.b)
 		}
 	}
 	return c
