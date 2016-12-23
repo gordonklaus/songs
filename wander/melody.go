@@ -112,37 +112,35 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 		}
 	}
 
-	histlen := len(m.history) - 2
-	if histlen < 0 {
-		histlen = 0
-	}
-	for _, n := range m.history[:histlen] {
-		if (rd.float()-n.t.float())*m.lastDuration <= m.coherencyTime {
-			break
-		}
-
-		m.times = nil
-		var prev *timeMultiplicity
-		for i, n := range m.history {
-			if i != 1 && prev != nil && n.t == prev.t {
-				prev.m++
-			} else {
-				m.times = append(m.times, timeMultiplicity{n.t, 1})
-				prev = &m.times[len(m.times)-1]
+	if lastToKeep := len(m.history) - lastSimulCount - 2; lastToKeep > 0 {
+		for _, n := range m.history[:lastToKeep] {
+			if (rd.float()-n.t.float())*m.lastDuration <= m.coherencyTime {
+				break
 			}
-		}
-		// fmt.Println(len(m.history), len(m.times), len(m.nextDuration))
 
-		for i := range m.nextDuration {
-			dc := &m.nextDuration[i]
-			dc.c -= m.firstDurationComplexity(dc.r)
-		}
-		for i := range m.nextFrequency {
-			fc := &m.nextFrequency[i]
-			fc.c -= m.firstFrequencyComplexity(fc.r)
-		}
+			m.times = nil
+			var prev *timeMultiplicity
+			for i, n := range m.history {
+				if i != 1 && prev != nil && n.t == prev.t {
+					prev.m++
+				} else {
+					m.times = append(m.times, timeMultiplicity{n.t, 1})
+					prev = &m.times[len(m.times)-1]
+				}
+			}
+			// fmt.Println(len(m.history), len(m.times), len(m.nextDuration))
 
-		m.history = m.history[1:]
+			for i := range m.nextDuration {
+				dc := &m.nextDuration[i]
+				dc.c -= m.firstDurationComplexity(dc.r)
+			}
+			for i := range m.nextFrequency {
+				fc := &m.nextFrequency[i]
+				fc.c -= m.firstFrequencyComplexity(fc.r)
+			}
+
+			m.history = m.history[1:]
+		}
 	}
 
 	m.history = append(m.history, note{
