@@ -245,6 +245,10 @@ func (m *Melody) firstDurationComplexity(next ratio) int {
 			c += n1.m * n2.m * complexity(r.a, r.b)
 		}
 	}
+	for _, n1 := range m.times[1:] {
+		r := next.sub(n0.t).div(next.sub(n1.t))
+		c += n1.m * complexity(r.a, r.b)
+	}
 	return c
 }
 
@@ -264,6 +268,9 @@ func (m *Melody) durationComplexity(next ratio) int {
 				r := d2.div(d1)
 				c += m1 * n2.m * complexity(r.a, r.b)
 			}
+
+			r := next.sub(n0.t).div(next.sub(n1.t))
+			c += m1 * complexity(r.a, r.b)
 		}
 	}
 	return c
@@ -293,6 +300,10 @@ func (m *Melody) nextDurationComplexity(next ratio) int {
 			r := d2.div(d1)
 			c += n1.m * n2.m * complexity(r.a, r.b)
 		}
+	}
+	for _, n0 := range m.times[:len(m.times)-1] {
+		r := next.sub(n0.t).div(next)
+		c += n0.m * complexity(r.a, r.b)
 	}
 	return c
 }
