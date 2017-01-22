@@ -97,22 +97,17 @@ func selectRatio(candidates []ratioComplexity, weight func(ratioComplexity) floa
 }
 
 func (m *Melody) appendHistory(rd, rf ratio) {
-	lastSimulCount := 0
+	lastSimultaneous := 0
 	for i := len(m.history) - 1; i >= 0; i-- {
 		if m.history[i].t.a != 0 {
 			break
 		}
-		lastSimulCount++
+		lastSimultaneous++
 	}
 
-	for i, dc := range m.nextDuration {
-		if rd.lessThan(dc.r) || (dc.r == rd && lastSimulCount < 5) {
-			m.nextDuration = m.nextDuration[i:]
-			break
-		}
-	}
+	m.trimPastDurations(rd, lastSimultaneous)
 
-	if lastToKeep := len(m.history) - lastSimulCount - 2; lastToKeep > 0 {
+	if lastToKeep := len(m.history) - lastSimultaneous - 2; lastToKeep > 0 {
 		for _, n := range m.history[:lastToKeep] {
 			if (rd.float()-n.t.float())*m.lastDuration <= m.coherencyTime {
 				break
@@ -205,6 +200,19 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	m.nextFrequency = addNext(m.nextFrequency, m.frequencyComplexity)
 
 	// fmt.Println(len(m.nextDuration), len(m.nextFrequency))
+}
+
+func (m *Melody) trimPastDurations(rd ratio, lastSimultaneous int) {
+	const maxSimultaneous = 5
+
+	i := 0
+	for ; i < len(m.nextDuration); i++ {
+		dc := m.nextDuration[i]
+		if rd.lessThan(dc.r) || (dc.r == rd && lastSimultaneous < maxSimultaneous) {
+			break
+		}
+	}
+	m.nextDuration = m.nextDuration[i:]
 }
 
 func addNext(rcs []ratioComplexity, complexity func(ratio) int) []ratioComplexity {
