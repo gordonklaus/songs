@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
 )
+
+var _ = fmt.Println
 
 type Melody struct {
 	rhythmBias    float64
@@ -39,7 +42,7 @@ type timeMultiplicity struct {
 func NewMelody() *Melody {
 	rhythmComplexity := .8    // 0..1
 	frequencyComplexity := .5 // 0..1
-	avgDuration := 0.25
+	avgDuration := 1.0
 	avgFrequency := 256.0
 	coherencyTime := 8.0
 	m := &Melody{
@@ -176,7 +179,6 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 			prev = &m.times[len(m.times)-1]
 		}
 	}
-	// fmt.Println(len(m.history), len(m.times), len(m.nextDuration))
 
 	for i := range m.nextDuration {
 		dc := &m.nextDuration[i]
@@ -195,11 +197,211 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	// 	}
 	// }
 	if rd.a > 0 {
+		oldRatios := ratios
+		ratios = m.genNextDurations()
 		m.nextDuration = addNext(m.nextDuration, m.durationComplexity)
+		ratios = oldRatios
 	}
 	m.nextFrequency = addNext(m.nextFrequency, m.frequencyComplexity)
 
-	// fmt.Println(len(m.nextDuration), len(m.nextFrequency))
+	fmt.Println(m.history)
+	fmt.Println(len(m.nextDuration))
+	fmt.Println()
+
+	// n := len(m.history)
+	// n = n * (n + 1) / 2
+	// n = n * (n - 1) / len(m.history)
+	// mc := m.newMinComplexity()
+	// for _, rc := range m.nextDuration {
+	// 	if rc.r.a != 0 {
+	// 		r := rc.r
+	// 		r.a *= mc.lcm
+	// 		r = r.normalized()
+	// 		if (float64(rc.c)-mc.minComplexity(r.a, r.b))/float64(n) < 0 {
+	// 			panic("no!")
+	// 		}
+	// 		// fmt.Println(rc, (float64(rc.c)-mc.minComplexity(r.a, r.b))/float64(n))
+	// 	}
+	// }
+	// fmt.Println()
+}
+
+func (m *Melody) genNextDurations() []ratio {
+	if len(m.history) == 1 {
+		return nil
+	}
+
+	minComplexity := 0.0
+	// minComplexityRatio := ratio{0, 1}
+	for i, rc := range m.nextDuration {
+		if i == 0 || float64(rc.c) < minComplexity {
+			minComplexity = float64(rc.c)
+			// minComplexityRatio = rc.r
+		}
+	}
+	n := len(m.history)
+	n = n * (n + 1) / 2
+	n = n * (n - 1) / len(m.history)
+	minComplexity /= float64(n)
+	pmax := 1. //math.Exp(-m.lastDuration*minComplexityRatio.float()/m.avgDuration) * math.Exp2(m.rhythmBias*minComplexity)
+	// fmt.Println("pmax:", pmax)
+
+	nextDurations := []ratio{}
+
+	mc := m.newMinComplexity()
+	for b := 1; ; b++ {
+		// fmt.Println("b:", b)
+		for a := 1; ; a++ {
+			if gcd(a, b) != 1 {
+				continue
+			}
+			c := mc.minComplexity(a, b) / float64(n)
+			p := math.Exp(-m.lastDuration*ratio{a, b}.float()/m.avgDuration) * math.Exp2(m.rhythmBias*c)
+			// fmt.Println("p:", p)
+			if !(a == 1 && b == 1) && p/pmax < .1 {
+				if a == 1 {
+					sort.Sort(ratiosAscending(nextDurations))
+					return nextDurations
+				}
+				// fmt.Println("max a:", a)
+				break
+			}
+			nextDurations = append(nextDurations, ratio{a, b * mc.lcm}.normalized())
+		}
+	}
+}
+
+type minComplexity struct {
+	history []int
+	D       float64
+	lcm     int
+}
+
+func (m *Melody) newMinComplexity() minComplexity {
+	history := make([]int, len(m.history))
+	lcm_ := 1
+	for _, n := range m.history {
+		lcm_ = lcm(lcm_, n.t.b)
+	}
+	for i, n := range m.history {
+		history[i] = n.t.mul(ratio{lcm_, 1}).normalized().a
+	}
+
+	D := 0.0
+	N := float64(len(history))
+	for i, t1 := range history {
+		for _, t0 := range history[:i] {
+			if t1 > t0 {
+				D += (N + 2) * float64(complexity(t1-t0))
+			}
+		}
+	}
+	return minComplexity{
+		history: history,
+		D:       D,
+		lcm:     lcm_,
+	}
+}
+
+func (mc minComplexity) minComplexity(a, b int) float64 {
+	ac := 0.0
+	mindiv := 1
+	maxdiv := []int{}
+	for i := 0; ; i++ {
+		p := prime(i)
+		if p > len(mc.history) && p > a-mc.history[0]*b {
+			break
+		}
+		maxdiv_ := 0
+		// d <= len(mc.history) is for mindiv   TODO: should be len(mc.times)?
+		// d <= a-mc.history[0]*b is for maxdiv
+		for d := p; d <= len(mc.history) || d <= a-mc.history[0]*b; d *= p {
+			if b%d == 0 {
+				continue
+			}
+			r := make([]int, d)
+			for _, t := range mc.history {
+				r[(-t*b)%d]++
+			}
+			min := d
+			max := 0
+			for _, r := range r {
+				if r < min {
+					min = r
+				}
+				if r > max {
+					max = r
+				}
+			}
+			for x := 0; x < min; x++ {
+				mindiv *= p
+				ac += float64(p - 1)
+			}
+			maxdiv_ += max - min
+		}
+		maxdiv = append(maxdiv, maxdiv_)
+	}
+
+	A := 1.0
+	// AA := 1
+	for _, t := range mc.history {
+		A *= float64(a - t*b)
+		// AA *= a - t*b
+	}
+	if math.IsInf(A, 0) {
+		panic("too much")
+	}
+	// if AA%mindiv != 0 {
+	// 	fmt.Println(a, b, mc.history)
+	// 	println(AA, mindiv)
+	// 	panic("UHOH")
+	// }
+	// fmt.Print(math.Log2(A), " ")
+	A /= float64(mindiv)
+	// fmt.Println(math.Log2(A) + float64(ac))
+
+	for i, maxdiv_ := range maxdiv {
+		p := float64(primes[i])
+		d := 1.0
+		for j := 0; j < maxdiv_; j++ {
+			d *= p
+		}
+		if A < float64(d) {
+			A = 1
+			ac += (p - 1) * math.Log(A) / math.Log(p)
+			break
+		}
+		A /= d
+		ac += float64(maxdiv_ * (primes[i] - 1))
+		if i == len(maxdiv)-1 && A != 1 {
+			panic("too far")
+		}
+	}
+
+	N := float64(len(mc.history))
+	return (N+2)*(N-1)/2*ac - mc.D + N*N*(N-1)/2*math.Log2(float64(b)) // TODO: float64(complexity(b))), and only quit when b is a power of 2?
+}
+
+var primes = []int{2, 3}
+
+func prime(i int) int {
+	for i >= len(primes) {
+		for x := primes[len(primes)-1] + 2; ; x += 2 {
+			isPrime := true
+			for _, p := range primes {
+				if x%p == 0 {
+					isPrime = false
+					break
+				}
+			}
+			if isPrime {
+				primes = append(primes, x)
+				break
+			}
+		}
+	}
+	return primes[i]
+
 }
 
 func (m *Melody) trimPastDurations(rd ratio, lastSimultaneous int) {
@@ -241,7 +443,7 @@ func (m *Melody) firstDurationComplexity(next ratio) int {
 	for i, n1 := range m.times {
 		for _, n0 := range m.times[:i] {
 			r := n1.t.sub(n0.t).div(d)
-			c += n1.m * n0.m * complexity(r.a, r.b)
+			c += n1.m * n0.m * r.complexity()
 		}
 	}
 	n0 := m.times[0]
@@ -250,19 +452,19 @@ func (m *Melody) firstDurationComplexity(next ratio) int {
 		for _, n2 := range m.times[1:] { // Start at 1 because we already counted the first one above.
 			d2 := next.sub(n2.t)
 			r := d2.div(d1)
-			c += n1.m * n2.m * complexity(r.a, r.b)
+			c += n1.m * n2.m * r.complexity()
 		}
 	}
 	for _, n1 := range m.times[1:] {
 		r := next.sub(n0.t).div(next.sub(n1.t))
-		c += n1.m * complexity(r.a, r.b)
+		c += n1.m * r.complexity()
 	}
 	return c
 }
 
 func (m *Melody) firstFrequencyComplexity(next ratio) int {
 	r := next.div(m.history[0].f)
-	return complexity(r.a, r.b)
+	return r.complexity()
 }
 
 func (m *Melody) durationComplexity(next ratio) int {
@@ -274,11 +476,11 @@ func (m *Melody) durationComplexity(next ratio) int {
 			for _, n2 := range m.times {
 				d2 := next.sub(n2.t)
 				r := d2.div(d1)
-				c += m1 * n2.m * complexity(r.a, r.b)
+				c += m1 * n2.m * r.complexity()
 			}
 
 			r := next.sub(n0.t).div(next.sub(n1.t))
-			c += m1 * complexity(r.a, r.b)
+			c += m1 * r.complexity()
 		}
 	}
 	return c
@@ -288,7 +490,7 @@ func (m *Melody) frequencyComplexity(next ratio) int {
 	c := 0
 	for _, n := range m.history {
 		r := next.div(n.f)
-		c += complexity(r.a, r.b)
+		c += r.complexity()
 	}
 	return c
 }
@@ -298,7 +500,7 @@ func (m *Melody) nextDurationComplexity(next ratio) int {
 	for i, n1 := range m.times {
 		for _, n0 := range m.times[:i] {
 			r := n1.t.sub(n0.t).div(next)
-			c += n1.m * n0.m * complexity(r.a, r.b)
+			c += n1.m * n0.m * r.complexity()
 		}
 	}
 	for _, n1 := range m.times {
@@ -306,29 +508,23 @@ func (m *Melody) nextDurationComplexity(next ratio) int {
 		for _, n2 := range m.times[:len(m.times)-1] { // Stop at len-1 because we already counted the last one above.
 			d2 := next.sub(n2.t)
 			r := d2.div(d1)
-			c += n1.m * n2.m * complexity(r.a, r.b)
+			c += n1.m * n2.m * r.complexity()
 		}
 	}
 	for _, n0 := range m.times[:len(m.times)-1] {
 		r := next.sub(n0.t).div(next)
-		c += n0.m * complexity(r.a, r.b)
+		c += n0.m * r.complexity()
 	}
 	return c
 }
 
 func (m *Melody) nextFrequencyComplexity(next ratio) int {
-	return complexity(next.a, next.b)
+	return next.complexity()
 }
 
 var complexityCache = map[int]int{}
 
-func complexity(a, b int) int {
-	if a == b || a == 0 || b == 0 {
-		return 0
-	}
-	d := gcd(a, b)
-	d *= d
-	n := a * b / d
+func complexity(n int) int {
 	if c, ok := complexityCache[n]; ok {
 		return c
 	}
@@ -348,6 +544,12 @@ func complexity(a, b int) int {
 }
 
 func gcd(a, b int) int {
+	// if a < 0 {
+	// 	a = -a
+	// }
+	// if b < 0 {
+	// 	b = -b
+	// }
 	if a > b {
 		a, b = b, a
 	}
@@ -355,6 +557,10 @@ func gcd(a, b int) int {
 		a, b = b%a, a
 	}
 	return b
+}
+
+func lcm(a, b int) int {
+	return a * b / gcd(a, b)
 }
 
 type ratio struct {
@@ -385,12 +591,25 @@ func (r ratio) sub(s ratio) ratio {
 	return ratio{r.a*s.b - s.a*r.b, d}
 }
 
+func (r ratio) mul(s ratio) ratio {
+	return ratio{r.a * s.a, r.b * s.b}
+}
+
 func (r ratio) div(s ratio) ratio {
 	return ratio{r.a * s.b, r.b * s.a}
 }
 
 func (r ratio) lessThan(s ratio) bool {
 	return r.a*s.b < r.b*s.a
+}
+
+func (r ratio) complexity() int {
+	if r.a == r.b || r.a == 0 || r.b == 0 {
+		return 0
+	}
+	d := gcd(r.a, r.b)
+	d *= d
+	return complexity(r.a * r.b / d)
 }
 
 func (r ratio) float() float64 { return float64(r.a) / float64(r.b) }
@@ -421,7 +640,7 @@ func init() {
 					n, d = mul(n, d, 3, three)
 					n, d = mul(n, d, 5, five)
 					n, d = mul(n, d, 7, seven)
-					if complexity(n, d) < 12 {
+					if (ratio{n, d}).complexity() < 12 {
 						ratios = append(ratios, ratio{n, d})
 					}
 				}
