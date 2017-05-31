@@ -204,9 +204,9 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	}
 	m.nextFrequency = addNext(m.nextFrequency, m.frequencyComplexity)
 
-	fmt.Println(m.history)
+	// fmt.Println(m.history)
 	fmt.Println(len(m.nextDuration))
-	fmt.Println()
+	// fmt.Println()
 
 	// n := len(m.history)
 	// n = n * (n + 1) / 2
@@ -232,19 +232,19 @@ func (m *Melody) genNextDurations() []ratio {
 	}
 
 	minComplexity := 0.0
-	// minComplexityRatio := ratio{0, 1}
+	minComplexityRatio := ratio{0, 1}
 	for i, rc := range m.nextDuration {
 		if i == 0 || float64(rc.c) < minComplexity {
 			minComplexity = float64(rc.c)
-			// minComplexityRatio = rc.r
+			minComplexityRatio = rc.r
 		}
 	}
 	n := len(m.history)
 	n = n * (n + 1) / 2
 	n = n * (n - 1) / len(m.history)
 	minComplexity /= float64(n)
-	pmax := 1. //math.Exp(-m.lastDuration*minComplexityRatio.float()/m.avgDuration) * math.Exp2(m.rhythmBias*minComplexity)
-	// fmt.Println("pmax:", pmax)
+	pmax := math.Exp(-m.lastDuration*minComplexityRatio.float()/m.avgDuration) * math.Exp2(m.rhythmBias*minComplexity)
+	// fmt.Println("most likely:", minComplexityRatio, pmax)
 
 	nextDurations := []ratio{}
 
@@ -272,9 +272,10 @@ func (m *Melody) genNextDurations() []ratio {
 }
 
 type minComplexity struct {
-	history []int
-	D       float64
-	lcm     int
+	history   []int
+	D         float64
+	divCounts [][]int
+	lcm       int
 }
 
 func (m *Melody) newMinComplexity() minComplexity {
@@ -292,19 +293,46 @@ func (m *Melody) newMinComplexity() minComplexity {
 	for i, t1 := range history {
 		for _, t0 := range history[:i] {
 			if t1 > t0 {
-				D += (N + 2) * float64(complexity(t1-t0))
+				D += (2 - N) * float64(complexity(t1-t0))
 			}
 		}
 	}
+
+	divCounts := [][]int{}
+	for i := 0; ; i++ {
+		p := prime(i)
+		counts := []int{}
+		for d := p; ; d *= p {
+			count := 0
+			for i, t1 := range history {
+				for _, t0 := range history[:i] {
+					if t1 > t0 && (t1-t0)%d == 0 {
+						count++
+					}
+				}
+			}
+			if count == 0 {
+				break
+			}
+			counts = append(counts, count)
+		}
+		if len(counts) == 0 {
+			break
+		}
+		divCounts = append(divCounts, counts)
+	}
+
 	return minComplexity{
-		history: history,
-		D:       D,
-		lcm:     lcm_,
+		history:   history,
+		D:         D,
+		divCounts: divCounts,
+		lcm:       lcm_,
 	}
 }
 
 func (mc minComplexity) minComplexity(a, b int) float64 {
 	ac := 0.0
+	dc := 0.0
 	mindiv := 1
 	maxdiv := []int{}
 	for i := 0; ; i++ {
@@ -315,7 +343,7 @@ func (mc minComplexity) minComplexity(a, b int) float64 {
 		maxdiv_ := 0
 		// d <= len(mc.history) is for mindiv   TODO: should be len(mc.times)?
 		// d <= a-mc.history[0]*b is for maxdiv
-		for d := p; d <= len(mc.history) || d <= a-mc.history[0]*b; d *= p {
+		for di, d := 0, p; d <= len(mc.history) || d <= a-mc.history[0]*b; d *= p {
 			if b%d == 0 {
 				continue
 			}
@@ -335,9 +363,13 @@ func (mc minComplexity) minComplexity(a, b int) float64 {
 			}
 			for x := 0; x < min; x++ {
 				mindiv *= p
-				ac += float64(p - 1)
+			}
+			ac += float64(min * (p - 1))
+			if i < len(mc.divCounts) && di < len(mc.divCounts[i]) {
+				dc += float64(max * mc.divCounts[i][di] * (p - 1))
 			}
 			maxdiv_ += max - min
+			di++
 		}
 		maxdiv = append(maxdiv, maxdiv_)
 	}
@@ -379,7 +411,7 @@ func (mc minComplexity) minComplexity(a, b int) float64 {
 	}
 
 	N := float64(len(mc.history))
-	return (N+2)*(N-1)/2*ac - mc.D + N*N*(N-1)/2*math.Log2(float64(b)) // TODO: float64(complexity(b))), and only quit when b is a power of 2?
+	return (N+2)*(N-1)/2*ac - 2*dc - mc.D + N*N*(N-1)/2*math.Log2(float64(b)) // TODO: float64(complexity(b))), and only quit when b is a power of 2?
 }
 
 var primes = []int{2, 3}
