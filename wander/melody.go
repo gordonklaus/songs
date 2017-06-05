@@ -196,6 +196,7 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	// 		// print("|")
 	// 	}
 	// }
+	// fmt.Println(m.history)
 	if rd.a > 0 {
 		oldRatios := ratios
 		ratios = m.genNextDurations()
@@ -204,8 +205,10 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	}
 	m.nextFrequency = addNext(m.nextFrequency, m.frequencyComplexity)
 
-	// fmt.Println(m.history)
 	fmt.Println(len(m.nextDuration))
+	// mc := m.newMinComplexity()
+	// c, cmia, cmi := mc.minComplexity(mc.lcm, 1)
+	// fmt.Println(m.durationComplexity(ratio{1, 1}), c, cmia, cmi)
 	// fmt.Println()
 
 	// n := len(m.history)
@@ -227,7 +230,7 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 }
 
 func (m *Melody) genNextDurations() []ratio {
-	if len(m.history) == 1 {
+	if len(m.history) <= 2 {
 		return nil
 	}
 
@@ -250,24 +253,34 @@ func (m *Melody) genNextDurations() []ratio {
 
 	mc := m.newMinComplexity()
 	for b := 1; ; b++ {
-		// fmt.Println("b:", b)
+		// fmt.Print("  b:", b)
 		for a := 1; ; a++ {
 			if gcd(a, b) != 1 {
 				continue
 			}
-			c := mc.minComplexity(a, b) / float64(n)
-			p := math.Exp(-m.lastDuration*ratio{a, b}.float()/m.avgDuration) * math.Exp2(m.rhythmBias*c)
+			r := ratio{a, b * mc.lcm}.normalized()
+			// fmt.Println("  a:", a)
+			c, cmia, cmi := mc.minComplexity(a, b)
+			p := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*c/float64(n))
 			// fmt.Println("p:", p)
-			if !(a == 1 && b == 1) && p/pmax < .1 {
-				if a == 1 {
-					sort.Sort(ratiosAscending(nextDurations))
-					return nextDurations
+			const plimit = .01
+			if !(a == 1 && b == 1) && p/pmax < plimit {
+				pmia := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*cmia/float64(n))
+				if pmia/pmax < plimit {
+					pmi := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*cmi/float64(n))
+					if a == 1 && pmi/pmax < plimit { // && isPowerOfTwo(b) {
+						fmt.Println()
+						sort.Sort(ratiosAscending(nextDurations))
+						return nextDurations
+					}
+					// fmt.Println("max a:", a)
+					break
 				}
-				// fmt.Println("max a:", a)
-				break
+				continue
 			}
-			nextDurations = append(nextDurations, ratio{a, b * mc.lcm}.normalized())
+			nextDurations = append(nextDurations, r)
 		}
+		// fmt.Println()
 	}
 }
 
@@ -330,7 +343,7 @@ func (m *Melody) newMinComplexity() minComplexity {
 	}
 }
 
-func (mc minComplexity) minComplexity(a, b int) float64 {
+func (mc minComplexity) minComplexity(a, b int) (float64, float64, float64) {
 	ac := 0.0
 	dc := 0.0
 	mindiv := 1
@@ -344,14 +357,14 @@ func (mc minComplexity) minComplexity(a, b int) float64 {
 		// d <= len(mc.history) is for mindiv   TODO: should be len(mc.times)?
 		// d <= a-mc.history[0]*b is for maxdiv
 		for di, d := 0, p; d <= len(mc.history) || d <= a-mc.history[0]*b; d *= p {
-			if b%d == 0 {
-				continue
+			if b%p == 0 {
+				break
 			}
 			r := make([]int, d)
 			for _, t := range mc.history {
-				r[(-t*b)%d]++
+				r[(-t)%d]++
 			}
-			min := d
+			min := d // TODO: len(mc.history) (should make no difference, but for clarity)
 			max := 0
 			for _, r := range r {
 				if r < min {
@@ -405,13 +418,31 @@ func (mc minComplexity) minComplexity(a, b int) float64 {
 		}
 		A /= d
 		ac += float64(maxdiv_ * (primes[i] - 1))
-		if i == len(maxdiv)-1 && A != 1 {
-			panic("too far")
+	}
+	for i := len(maxdiv); A > 1; i++ {
+		p := float64(prime(i))
+		if A < p {
+			A = 1
+			ac += (p - 1) * math.Log(A) / math.Log(p)
+			break
 		}
+		A /= p
+		ac += p - 1
 	}
 
+	acnm := 0
+	for _, t := range mc.history {
+		acnm += complexity(a - t*b)
+	}
+
+	bnm := float64(complexity(b))
+	bmi := math.Log2(float64(b))
+
 	N := float64(len(mc.history))
-	return (N+2)*(N-1)/2*ac - 2*dc - mc.D + N*N*(N-1)/2*math.Log2(float64(b)) // TODO: float64(complexity(b))), and only quit when b is a power of 2?
+	c := (N+2)*(N-1)/2*float64(acnm) - 2*dc - mc.D + N*N*(N-1)/2*bnm
+	cmia := (N+2)*(N-1)/2*ac - 2*dc - mc.D + N*N*(N-1)/2*bnm
+	cmi := (N+2)*(N-1)/2*ac - 2*dc - mc.D + N*N*(N-1)/2*bmi
+	return c, cmia, cmi
 }
 
 var primes = []int{2, 3}
