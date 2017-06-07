@@ -289,8 +289,12 @@ func (m *Melody) genNextDurations() []ratio {
 type minComplexity struct {
 	history   []int
 	D         float64
-	divCounts [][]int
+	divCounts [][]divCount
 	lcm       int
+}
+
+type divCount struct {
+	d, min, max, count int
 }
 
 func (m *Melody) newMinComplexity() minComplexity {
@@ -312,15 +316,30 @@ func (m *Melody) newMinComplexity() minComplexity {
 		}
 	}
 
-	divCounts := [][]int{}
+	divCounts := [][]divCount{}
 	for i := 0; ; i++ {
 		p := prime(i)
 		if p > -history[0] {
 			break
 		}
 
-		counts := []int{}
+		counts := []divCount{}
 		for d := p; ; d *= p {
+			r := make([]int, d)
+			for _, t := range history {
+				r[(-t)%d]++
+			}
+			min := len(history)
+			max := 0
+			for _, r := range r {
+				if r < min {
+					min = r
+				}
+				if r > max {
+					max = r
+				}
+			}
+
 			count := 0
 			for i, t1 := range history {
 				for _, t0 := range history[:i] {
@@ -329,10 +348,10 @@ func (m *Melody) newMinComplexity() minComplexity {
 					}
 				}
 			}
-			if count == 0 {
+			if min == 0 && count == 0 {
 				break
 			}
-			counts = append(counts, count)
+			counts = append(counts, divCount{d, min, max, count})
 		}
 		divCounts = append(divCounts, counts)
 	}
@@ -347,25 +366,13 @@ func (m *Melody) newMinComplexity() minComplexity {
 
 func (mc minComplexity) estimate(a, b int) float64 {
 	G := 0.0
-	for i := range mc.divCounts {
-		p := prime(i)
-		d := p
-		for di := range mc.divCounts[i] {
-			if b%p == 0 {
-				break
-			}
-			r := make([]int, d)
-			for _, t := range mc.history {
-				r[(-t)%d]++
-			}
-			max := 0
-			for _, r := range r {
-				if r > max {
-					max = r
-				}
-			}
-			G += float64(max * mc.divCounts[i][di] * (p - 1))
-			d *= p
+	for i, divCounts := range mc.divCounts {
+		p := primes[i]
+		if b%p == 0 {
+			continue
+		}
+		for _, count := range divCounts {
+			G += float64(count.max * count.count * (p - 1))
 		}
 	}
 
@@ -384,34 +391,17 @@ func (mc minComplexity) estimateNonDecreasingWithA(a, b int) float64 {
 	mindiv := 1
 	mindivComplexity := 0
 	G := 0.0
-	// mindiv must consider all divisors <= len(history).  divCounts meets or exceeds this range.
-	for i := range mc.divCounts {
-		p := prime(i)
-		d := p
-		for di := range mc.divCounts[i] {
-			if b%p == 0 {
-				break
-			}
-			r := make([]int, d)
-			for _, t := range mc.history {
-				r[(-t)%d]++
-			}
-			min := d // TODO: len(mc.history) (should make no difference, but for clarity)
-			max := 0
-			for _, r := range r {
-				if r < min {
-					min = r
-				}
-				if r > max {
-					max = r
-				}
-			}
-			for x := 0; x < min; x++ {
+	for i, divCounts := range mc.divCounts {
+		p := primes[i]
+		if b%p == 0 {
+			continue
+		}
+		for _, count := range divCounts {
+			for x := 0; x < count.min; x++ {
 				mindiv *= p
 			}
-			mindivComplexity += min * (p - 1)
-			G += float64(max * mc.divCounts[i][di] * (p - 1))
-			d *= p
+			mindivComplexity += count.min * (p - 1)
+			G += float64(count.max * count.count * (p - 1))
 		}
 	}
 
@@ -445,107 +435,107 @@ func (mc minComplexity) estimateNonDecreasing(a, b int) float64 {
 	return (N+2)*(N-1)/2*T + N*N*(N-1)/2*B - 2*G + (N-2)*mc.D
 }
 
-func (mc minComplexity) minComplexity(a, b int) (float64, float64, float64) {
-	ac := 0.0
-	dc := 0.0
-	mindiv := 1
-	maxdiv := []int{}
-	for i := 0; ; i++ {
-		p := prime(i)
-		if p > len(mc.history) && p > a-mc.history[0]*b {
-			break
-		}
-		maxdiv_ := 0
-		// d <= len(mc.history) is for mindiv   TODO: should be len(mc.times)?
-		// d <= a-mc.history[0]*b is for maxdiv
-		for di, d := 0, p; d <= len(mc.history) || d <= a-mc.history[0]*b; d *= p {
-			if b%p == 0 {
-				break
-			}
-			r := make([]int, d)
-			for _, t := range mc.history {
-				r[(-t)%d]++
-			}
-			min := d // TODO: len(mc.history) (should make no difference, but for clarity)
-			max := 0
-			for _, r := range r {
-				if r < min {
-					min = r
-				}
-				if r > max {
-					max = r
-				}
-			}
-			for x := 0; x < min; x++ {
-				mindiv *= p
-			}
-			ac += float64(min * (p - 1))
-			if i < len(mc.divCounts) && di < len(mc.divCounts[i]) {
-				dc += float64(max * mc.divCounts[i][di] * (p - 1))
-			}
-			maxdiv_ += max - min
-			di++
-		}
-		maxdiv = append(maxdiv, maxdiv_)
-	}
+// func (mc minComplexity) minComplexity(a, b int) (float64, float64, float64) {
+// 	ac := 0.0
+// 	dc := 0.0
+// 	mindiv := 1
+// 	maxdiv := []int{}
+// 	for i := 0; ; i++ {
+// 		p := prime(i)
+// 		if p > len(mc.history) && p > a-mc.history[0]*b {
+// 			break
+// 		}
+// 		maxdiv_ := 0
+// 		// d <= len(mc.history) is for mindiv   TODO: should be len(mc.times)?
+// 		// d <= a-mc.history[0]*b is for maxdiv
+// 		for di, d := 0, p; d <= len(mc.history) || d <= a-mc.history[0]*b; d *= p {
+// 			if b%p == 0 {
+// 				break
+// 			}
+// 			r := make([]int, d)
+// 			for _, t := range mc.history {
+// 				r[(-t)%d]++
+// 			}
+// 			min := d // TODO: len(mc.history) (should make no difference, but for clarity)
+// 			max := 0
+// 			for _, r := range r {
+// 				if r < min {
+// 					min = r
+// 				}
+// 				if r > max {
+// 					max = r
+// 				}
+// 			}
+// 			for x := 0; x < min; x++ {
+// 				mindiv *= p
+// 			}
+// 			ac += float64(min * (p - 1))
+// 			if i < len(mc.divCounts) && di < len(mc.divCounts[i]) {
+// 				dc += float64(max * mc.divCounts[i][di] * (p - 1))
+// 			}
+// 			maxdiv_ += max - min
+// 			di++
+// 		}
+// 		maxdiv = append(maxdiv, maxdiv_)
+// 	}
 
-	A := 1.0
-	// AA := 1
-	for _, t := range mc.history {
-		A *= float64(a - t*b)
-		// AA *= a - t*b
-	}
-	if math.IsInf(A, 0) {
-		panic("too much")
-	}
-	// if AA%mindiv != 0 {
-	// 	fmt.Println(a, b, mc.history)
-	// 	println(AA, mindiv)
-	// 	panic("UHOH")
-	// }
-	// fmt.Print(math.Log2(A), " ")
-	A /= float64(mindiv)
-	// fmt.Println(math.Log2(A) + float64(ac))
+// 	A := 1.0
+// 	// AA := 1
+// 	for _, t := range mc.history {
+// 		A *= float64(a - t*b)
+// 		// AA *= a - t*b
+// 	}
+// 	if math.IsInf(A, 0) {
+// 		panic("too much")
+// 	}
+// 	// if AA%mindiv != 0 {
+// 	// 	fmt.Println(a, b, mc.history)
+// 	// 	println(AA, mindiv)
+// 	// 	panic("UHOH")
+// 	// }
+// 	// fmt.Print(math.Log2(A), " ")
+// 	A /= float64(mindiv)
+// 	// fmt.Println(math.Log2(A) + float64(ac))
 
-	for i, maxdiv_ := range maxdiv {
-		p := float64(primes[i])
-		d := 1.0
-		for j := 0; j < maxdiv_; j++ {
-			d *= p
-		}
-		if A < float64(d) {
-			A = 1
-			ac += (p - 1) * math.Log(A) / math.Log(p)
-			break
-		}
-		A /= d
-		ac += float64(maxdiv_ * (primes[i] - 1))
-	}
-	for i := len(maxdiv); A > 1; i++ {
-		p := float64(prime(i))
-		if A < p {
-			A = 1
-			ac += (p - 1) * math.Log(A) / math.Log(p)
-			break
-		}
-		A /= p
-		ac += p - 1
-	}
+// 	for i, maxdiv_ := range maxdiv {
+// 		p := float64(primes[i])
+// 		d := 1.0
+// 		for j := 0; j < maxdiv_; j++ {
+// 			d *= p
+// 		}
+// 		if A < float64(d) {
+// 			A = 1
+// 			ac += (p - 1) * math.Log(A) / math.Log(p)
+// 			break
+// 		}
+// 		A /= d
+// 		ac += float64(maxdiv_ * (primes[i] - 1))
+// 	}
+// 	for i := len(maxdiv); A > 1; i++ {
+// 		p := float64(prime(i))
+// 		if A < p {
+// 			A = 1
+// 			ac += (p - 1) * math.Log(A) / math.Log(p)
+// 			break
+// 		}
+// 		A /= p
+// 		ac += p - 1
+// 	}
 
-	acnm := 0
-	for _, t := range mc.history {
-		acnm += complexity(a - t*b)
-	}
+// 	acnm := 0
+// 	for _, t := range mc.history {
+// 		acnm += complexity(a - t*b)
+// 	}
 
-	bnm := float64(complexity(b))
-	bmi := math.Log2(float64(b))
+// 	bnm := float64(complexity(b))
+// 	bmi := math.Log2(float64(b))
 
-	N := float64(len(mc.history))
-	c := (N+2)*(N-1)/2*float64(acnm) - 2*dc - mc.D + N*N*(N-1)/2*bnm
-	cmia := (N+2)*(N-1)/2*ac - 2*dc - mc.D + N*N*(N-1)/2*bnm
-	cmi := (N+2)*(N-1)/2*ac - 2*dc - mc.D + N*N*(N-1)/2*bmi
-	return c, cmia, cmi
-}
+// 	N := float64(len(mc.history))
+// 	c := (N+2)*(N-1)/2*float64(acnm) - 2*dc - mc.D + N*N*(N-1)/2*bnm
+// 	cmia := (N+2)*(N-1)/2*ac - 2*dc - mc.D + N*N*(N-1)/2*bnm
+// 	cmi := (N+2)*(N-1)/2*ac - 2*dc - mc.D + N*N*(N-1)/2*bmi
+// 	return c, cmia, cmi
+// }
 
 var primes = []int{2, 3}
 
