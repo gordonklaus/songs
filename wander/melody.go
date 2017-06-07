@@ -205,7 +205,7 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	}
 	m.nextFrequency = addNext(m.nextFrequency, m.frequencyComplexity)
 
-	fmt.Println(len(m.nextDuration))
+	fmt.Println(m.nextDuration)
 	// mc := m.newMinComplexity()
 	// c, cmia, cmi := mc.minComplexity(mc.lcm, 1)
 	// fmt.Println(m.durationComplexity(ratio{1, 1}), c, cmia, cmi)
@@ -260,20 +260,22 @@ func (m *Melody) genNextDurations() []ratio {
 			}
 			r := ratio{a, b * mc.lcm}.normalized()
 			// fmt.Println("  a:", a)
-			c, cmia, cmi := mc.minComplexity(a, b)
+			c := mc.estimate(a, b)
 			p := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*c/float64(n))
 			// fmt.Println("p:", p)
 			const plimit = .01
 			if !(a == 1 && b == 1) && p/pmax < plimit {
-				pmia := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*cmia/float64(n))
-				if pmia/pmax < plimit {
-					pmi := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*cmi/float64(n))
-					if a == 1 && pmi/pmax < plimit { // && isPowerOfTwo(b) {
-						fmt.Println()
+				cnda := mc.estimateNonDecreasingWithA(a, b)
+				pnda := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*cnda/float64(n))
+				if pnda/pmax < plimit {
+					cnd := mc.estimateNonDecreasing(a, b)
+					pnd := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*cnd/float64(n))
+					if a == 1 && pnd/pmax < plimit {
+						fmt.Println("max b:", b)
 						sort.Sort(ratiosAscending(nextDurations))
 						return nextDurations
 					}
-					// fmt.Println("max a:", a)
+					// fmt.Println("-a:", a, " ", cnd, " ", pnd/pmax)
 					break
 				}
 				continue
@@ -302,11 +304,10 @@ func (m *Melody) newMinComplexity() minComplexity {
 	}
 
 	D := 0.0
-	N := float64(len(history))
 	for i, t1 := range history {
 		for _, t0 := range history[:i] {
 			if t1 > t0 {
-				D += (2 - N) * float64(complexity(t1-t0))
+				D += float64(complexity(t1 - t0))
 			}
 		}
 	}
@@ -314,6 +315,10 @@ func (m *Melody) newMinComplexity() minComplexity {
 	divCounts := [][]int{}
 	for i := 0; ; i++ {
 		p := prime(i)
+		if p > -history[0] {
+			break
+		}
+
 		counts := []int{}
 		for d := p; ; d *= p {
 			count := 0
@@ -329,9 +334,6 @@ func (m *Melody) newMinComplexity() minComplexity {
 			}
 			counts = append(counts, count)
 		}
-		if len(counts) == 0 {
-			break
-		}
 		divCounts = append(divCounts, counts)
 	}
 
@@ -341,6 +343,106 @@ func (m *Melody) newMinComplexity() minComplexity {
 		divCounts: divCounts,
 		lcm:       lcm_,
 	}
+}
+
+func (mc minComplexity) estimate(a, b int) float64 {
+	G := 0.0
+	for i := range mc.divCounts {
+		p := prime(i)
+		d := p
+		for di := range mc.divCounts[i] {
+			if b%p == 0 {
+				break
+			}
+			r := make([]int, d)
+			for _, t := range mc.history {
+				r[(-t)%d]++
+			}
+			max := 0
+			for _, r := range r {
+				if r > max {
+					max = r
+				}
+			}
+			G += float64(max * mc.divCounts[i][di] * (p - 1))
+			d *= p
+		}
+	}
+
+	T := 0
+	for _, t := range mc.history {
+		T += complexity(a - t*b)
+	}
+
+	B := float64(complexity(b))
+
+	N := float64(len(mc.history))
+	return (N+2)*(N-1)/2*float64(T) + N*N*(N-1)/2*B - 2*G + (N-2)*mc.D
+}
+
+func (mc minComplexity) estimateNonDecreasingWithA(a, b int) float64 {
+	mindiv := 1
+	mindivComplexity := 0
+	G := 0.0
+	// mindiv must consider all divisors <= len(history).  divCounts meets or exceeds this range.
+	for i := range mc.divCounts {
+		p := prime(i)
+		d := p
+		for di := range mc.divCounts[i] {
+			if b%p == 0 {
+				break
+			}
+			r := make([]int, d)
+			for _, t := range mc.history {
+				r[(-t)%d]++
+			}
+			min := d // TODO: len(mc.history) (should make no difference, but for clarity)
+			max := 0
+			for _, r := range r {
+				if r < min {
+					min = r
+				}
+				if r > max {
+					max = r
+				}
+			}
+			for x := 0; x < min; x++ {
+				mindiv *= p
+			}
+			mindivComplexity += min * (p - 1)
+			G += float64(max * mc.divCounts[i][di] * (p - 1))
+			d *= p
+		}
+	}
+
+	A := 1.0
+	for _, t := range mc.history {
+		A *= float64(a - t*b)
+	}
+	if math.IsInf(A, 0) {
+		panic("too much")
+	}
+	T := math.Log2(A/float64(mindiv)) + float64(mindivComplexity)
+	B := float64(complexity(b))
+
+	N := float64(len(mc.history))
+	return (N+2)*(N-1)/2*T + N*N*(N-1)/2*B - 2*G + (N-2)*mc.D
+}
+
+func (mc minComplexity) estimateNonDecreasing(a, b int) float64 {
+	A := 1.0
+	for _, t := range mc.history {
+		A *= float64(a - t*b)
+	}
+	if math.IsInf(A, 0) {
+		panic("too much")
+	}
+	T := math.Log2(A)
+	B := math.Log2(float64(b))
+
+	N := float64(len(mc.history))
+	G := N * mc.D
+	return (N+2)*(N-1)/2*T + N*N*(N-1)/2*B - 2*G + (N-2)*mc.D
 }
 
 func (mc minComplexity) minComplexity(a, b int) (float64, float64, float64) {
@@ -464,7 +566,6 @@ func prime(i int) int {
 		}
 	}
 	return primes[i]
-
 }
 
 func (m *Melody) trimPastDurations(rd ratio, lastSimultaneous int) {
