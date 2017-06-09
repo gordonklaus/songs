@@ -258,29 +258,37 @@ func (m *Melody) genNextDurations() []ratio {
 			if gcd(a, b) != 1 {
 				continue
 			}
-			r := ratio{a, b * mc.lcm}.normalized()
 			// fmt.Println("  a:", a)
-			c := mc.estimate(a, b)
-			p := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*c/float64(n))
-			// fmt.Println("p:", p)
+
+			r := ratio{a, b * mc.lcm}.normalized()
+			durationMultiplier := math.Exp(-m.lastDuration * r.float() / m.avgDuration)
+
 			const plimit = .01
-			if !(a == 1 && b == 1) && p/pmax < plimit {
+
+			if !(a == 1 && b == 1) {
 				cnda := mc.estimateNonDecreasingWithA(a, b)
-				pnda := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*cnda/float64(n))
+				pnda := durationMultiplier * math.Exp2(m.rhythmBias*cnda/float64(n))
 				if pnda/pmax < plimit {
-					cnd := mc.estimateNonDecreasing(a, b)
-					pnd := math.Exp(-m.lastDuration*r.float()/m.avgDuration) * math.Exp2(m.rhythmBias*cnd/float64(n))
-					if a == 1 && pnd/pmax < plimit {
-						fmt.Println("max b:", b)
-						sort.Sort(ratiosAscending(nextDurations))
-						return nextDurations
+					if a == 1 {
+						cnd := mc.estimateNonDecreasing(a, b)
+						pnd := durationMultiplier * math.Exp2(m.rhythmBias*cnd/float64(n))
+						if pnd/pmax < plimit {
+							fmt.Println("max b:", b)
+							sort.Sort(ratiosAscending(nextDurations))
+							return nextDurations
+						}
+						// fmt.Println("-a:", a, " ", cnd, " ", pnd/pmax)
 					}
-					// fmt.Println("-a:", a, " ", cnd, " ", pnd/pmax)
 					break
 				}
-				continue
 			}
-			nextDurations = append(nextDurations, r)
+
+			c := mc.estimate(a, b)
+			p := durationMultiplier * math.Exp2(m.rhythmBias*c/float64(n))
+			// fmt.Println("p:", p)
+			if p/pmax >= plimit {
+				nextDurations = append(nextDurations, r)
+			}
 		}
 		// fmt.Println()
 	}
@@ -289,12 +297,13 @@ func (m *Melody) genNextDurations() []ratio {
 type minComplexity struct {
 	history   []int
 	D         float64
-	divCounts [][]divCount
+	divCounts []divCount
 	lcm       int
 }
 
 type divCount struct {
-	d, min, max, count int
+	mindiv, mindivComplexity int
+	G                        float64
 }
 
 func (m *Melody) newMinComplexity() minComplexity {
@@ -316,14 +325,16 @@ func (m *Melody) newMinComplexity() minComplexity {
 		}
 	}
 
-	divCounts := [][]divCount{}
+	divCounts := []divCount{}
 	for i := 0; ; i++ {
 		p := prime(i)
 		if p > -history[0] {
 			break
 		}
 
-		counts := []divCount{}
+		mindiv := 1
+		mindivComplexity := 0
+		G := 0.0
 		for d := p; ; d *= p {
 			r := make([]int, d)
 			for _, t := range history {
@@ -348,12 +359,18 @@ func (m *Melody) newMinComplexity() minComplexity {
 					}
 				}
 			}
+
 			if min == 0 && count == 0 {
 				break
 			}
-			counts = append(counts, divCount{d, min, max, count})
+
+			for x := 0; x < min; x++ {
+				mindiv *= p
+			}
+			mindivComplexity += min * (p - 1)
+			G += float64(max * count * (p - 1))
 		}
-		divCounts = append(divCounts, counts)
+		divCounts = append(divCounts, divCount{mindiv, mindivComplexity, G})
 	}
 
 	return minComplexity{
@@ -366,14 +383,12 @@ func (m *Melody) newMinComplexity() minComplexity {
 
 func (mc minComplexity) estimate(a, b int) float64 {
 	G := 0.0
-	for i, divCounts := range mc.divCounts {
+	for i, divCount := range mc.divCounts {
 		p := primes[i]
 		if b%p == 0 {
 			continue
 		}
-		for _, count := range divCounts {
-			G += float64(count.max * count.count * (p - 1))
-		}
+		G += divCount.G
 	}
 
 	T := 0
@@ -391,18 +406,14 @@ func (mc minComplexity) estimateNonDecreasingWithA(a, b int) float64 {
 	mindiv := 1
 	mindivComplexity := 0
 	G := 0.0
-	for i, divCounts := range mc.divCounts {
+	for i, divCount := range mc.divCounts {
 		p := primes[i]
 		if b%p == 0 {
 			continue
 		}
-		for _, count := range divCounts {
-			for x := 0; x < count.min; x++ {
-				mindiv *= p
-			}
-			mindivComplexity += count.min * (p - 1)
-			G += float64(count.max * count.count * (p - 1))
-		}
+		mindiv *= divCount.mindiv
+		mindivComplexity += divCount.mindivComplexity
+		G += divCount.G
 	}
 
 	A := 1.0
