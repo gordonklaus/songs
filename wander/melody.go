@@ -205,7 +205,7 @@ func (m *Melody) appendHistory(rd, rf ratio) {
 	}
 	m.nextFrequency = addNext(m.nextFrequency, m.frequencyComplexity)
 
-	fmt.Println(m.nextDuration)
+	fmt.Println(rd)
 	// mc := m.newMinComplexity()
 	// c, cmia, cmi := mc.minComplexity(mc.lcm, 1)
 	// fmt.Println(m.durationComplexity(ratio{1, 1}), c, cmia, cmi)
@@ -298,6 +298,8 @@ type minComplexity struct {
 	history   []int
 	D         float64
 	divCounts []divCount
+	coeff     []float64
+	GD        float64
 	lcm       int
 }
 
@@ -326,8 +328,23 @@ func (m *Melody) newMinComplexity() minComplexity {
 	}
 
 	divCounts := []divCount{}
+	coeff := make([]float64, len(history))
+	coeff[len(coeff)-1] = 1
+	GD := 0.0
 	for i := 0; ; i++ {
 		p := prime(i)
+
+		tdiv := 0
+		for i, t := range history {
+			if (-t)%p != 0 {
+				tdiv++
+				if coeff[i] == 0 {
+					coeff[i] = float64(p-1) / math.Log2(float64(p))
+				}
+			}
+		}
+
+		// Delay this check so that all the coeffs can be set above.
 		if p > -history[0] {
 			break
 		}
@@ -369,14 +386,22 @@ func (m *Melody) newMinComplexity() minComplexity {
 			}
 			mindivComplexity += min * (p - 1)
 			G += float64(max * count * (p - 1))
+			GD += float64(tdiv * count * (p - 1))
 		}
 		divCounts = append(divCounts, divCount{mindiv, mindivComplexity, G})
+	}
+	for i := range coeff {
+		if coeff[i] == 0 {
+			panic("ZERO")
+		}
 	}
 
 	return minComplexity{
 		history:   history,
 		D:         D,
 		divCounts: divCounts,
+		coeff:     coeff,
+		GD:        GD,
 		lcm:       lcm_,
 	}
 }
@@ -431,18 +456,17 @@ func (mc minComplexity) estimateNonDecreasingWithA(a, b int) float64 {
 }
 
 func (mc minComplexity) estimateNonDecreasing(a, b int) float64 {
-	A := 1.0
-	for _, t := range mc.history {
-		A *= float64(a - t*b)
+	T := 0.0
+	for i, t := range mc.history {
+		T += math.Log2(float64(a-t*b)) * mc.coeff[i]
 	}
-	if math.IsInf(A, 0) {
+	if math.IsInf(T, 0) {
 		panic("too much")
 	}
-	T := math.Log2(A)
 	B := math.Log2(float64(b))
 
 	N := float64(len(mc.history))
-	G := N * mc.D
+	G := float64(mc.GD)
 	return (N+2)*(N-1)/2*T + N*N*(N-1)/2*B - 2*G + (N-2)*mc.D
 }
 
