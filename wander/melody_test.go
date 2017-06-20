@@ -17,3 +17,10 @@ func BenchmarkMelody(b *testing.B) {
 		m.Next()
 	}
 }
+
+func TestMelody(t *testing.T) {
+	m := NewMelody()
+	for i := 0; ; i++ {
+		m.Next()
+	}
+}

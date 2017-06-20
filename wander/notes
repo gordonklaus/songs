@@ -1,0 +1,169 @@
+c(a, b) = c(a/gcd(a,b)) + c(b/gcd(a,b))
+        = c(a) - c(gcd(a,b)) + c(b) - c(gcd(a,b))
+        >= log2(a) + log2(b) - 2*c(gcd(a,b))
+
+
+
+C(D)  = (n+2)*(n-1)/2 * [c(a) + c(a-tb) + ...]
+        + n*[c(db) + ...]
+        - 2*[c(gcd(a-tb, db)) + ...]
+        - 2*[c(gcd(a-t_1b, a-t_2b)) + ...]
+      = (n+2)*(n-1)/2 * [c(a) + c(a-tb) + ...]
+        + n*n*(n-1)/2 * c(b)
+        + n*[c(d) + ...]
+        - 2*[c(gcd(a-tb, db)) + ...]
+        - 2*[c(gcd(a-t_1b, a-t_2b)) + ...]
+     >= (n+2)*(n-1)/2 * [c(a) + c(a-tb) + ...]
+        + n*[c(db) + ...]
+        - 2*(n+1)*[c(d) + ...]
+      = (n+2)*(n-1)/2 * [c(a) + c(a-tb) + ...]
+        + n*n*(n-1)/2 * c(b)
+        - (n+2) * [c(d) + ...]
+
+
+
+|b|2b|a|
+3*[log(b) + log(2b) + log(3b)] + 5*[log(a) + log(a+2b) + log(a+3b)] - 2*[4*1 + 4*2]
+
+
+c( b, a) >= log( b) + log(a)
+c(2b, a) >= log(2b) + log(a) - 2*c(2)
+c(3b, a) >= log(3b) + log(a) - 2*c(3)
+
+c( b, a+2b) >= log( b) + log(a+2b)
+c(2b, a+2b) >= log(2b) + log(a+2b) - 2*c(2)
+c(3b, a+2b) >= log(3b) + log(a+2b) - 2*c(3)
+
+c( b, a+3b) >= log (b) + log(a+3b)
+c(2b, a+3b) >= log(2b) + log(a+3b) - 2*c(2)
+c(3b, a+3b) >= log(3b) + log(a+3b) - 2*c(3)
+
+c(a+3b, a+2b) >= log(a+3b) + log(a+2b)
+c(a+3b, a)    >= log(a+3b) + log(a) - 2*c(3)
+c(a+2b, a)    >= log(a+2b) + log(a) - 2*c(2)
+
+
+It seems that reformulating the problem so that nextDuration has a >1 coefficient (e.g. 2, below) can yield a slightly higher bound for some ratios, a much lower bound for others.  Perhaps investigate.
+|b/2|b|a|
+|b|2b|2a|
+3*log(b) + 3*log(2b) + 3*log(3b) + 3*log(2a) + 3*log(2a+2b) + 3*log(2a+3b) - 2*[16]
+
+
+c( b, 2a) >= log( b) + log(2a) - 2*c(2)
+c(2b, 2a) >= log(2b) + log(2a) - 2*c(2)
+c(3b, 2a) >= log(3b) + log(2a) - 2*c(6)
+
+c( b, 2a+2b) >= log( b) + log(2a+2b) - 2*c(2)
+c(2b, 2a+2b) >= log(2b) + log(2a+2b) - 2*c(2)
+c(3b, 2a+2b) >= log(3b) + log(2a+2b) - 2*c(6)
+
+c( b, 2a+3b) >= log( b) + log(2a+3b) - 2*c(2)
+c(2b, 2a+3b) >= log(2b) + log(2a+3b) - 2*c(4)
+c(3b, 2a+3b) >= log(3b) + log(2a+3b) - 2*c(6)
+
+TODO: pair the a+mb terms with themselves!
+
+
+
+gcd(2a+mb, nb) | gcd(2na+mnb, nb) = n*gcd(2a+mb, b) = n*gcd(2a, b) | 2n
+
+
+
+
+d|a+mb  d|nb
+d|na+mnb  d|mnb
+d|na
+d|gcd(na, nb)
+gcd(na, nb) = n*gcd(a, b) = n
+d|n
+
+
+d|a+mb  d|nb
+d|n*(a+mb)
+d|gcd(n*(a+mb), nb)
+gcd(n*(a+mb), nb) = n*gcd(a+mb, b) = n*gcd(a, b) = n
+d|n
+
+
+gcd(a+mb, nb) | gcd(na+nmb, nb)
+              = n*gcd(a+mb, b)
+              = n*gcd(a, b)
+              = n
+^ can do better, no?  gcd(m,n)?
+
+
+gcd(a+mb, a+nb) = gcd(a+mb, (m-n)b)
+                | gcd((m-n)(a+mb), (m-n)b)
+                = (m-n)*gcd(a+mb, b)
+                = (m-n)*gcd(a, b)
+                = m-n
+
+
+
+
+
+
+gcd(a, b) = gcd(a+mb, b)
+          = gcd(a+mb, na+(mn+1)b)
+          = gcd((no+1)a+(mno+m+o)b, na+(mn+1)b))
+
+
+
+
+
+C = c(a) + c(b)
+2∤b-a  =>
+C >= min[log2(a) + 2*log3(b), 2*log3(a) + log2(b)]
+   = 2*log3(a) + log2(b)
+
+
+2∤b-a and 3∤b-a  =>  4 possibilities:
+2|a:         C >= log2(a) + 4*log5(b)
+2|a and 3|a: C >= 2+log2(a/3) + 4*log5(b) = 2-log2(3) + log2(a) + 4*log5(b)
+2|a and 3|b: C >= log2(a) + 2*log3(b)
+2|b:         C >= 4*log5(a) + log2(b)
+2|b and 3|a: C >= 2*log3(a) + log2(b)
+2|b and 3|b: C >= 4*log5(a) + 2+log2(b/3) = 4*log5(a) + 2-log2(3) + log2(b)
+
+[(4*log5(a) + log2(b)) - (2*log3(a) + log2(b))]/2 = 2*log5(a) - log3(a)
+                                              = 2*log3(a)/log3(5) - log3(a)
+                                              > 0
+
+[(log2(a) + 4*log5(b)) - (log2(a) + 2*log3(b))]/2 = 2*log5(b) - log3(b)
+                                              = 2*log3(b)/log3(5) - log3(b)
+                                              > 0
+C >= min[...] = 2*log3(a) + log2(b)
+
+
+
+0 < a < b, 1 < x < y
+1 < x < y  =>  log_y(x) < 1
+           =>  |log_x(b/a)| = |log_y(b/a)/log_y(x)|
+                            < |log_y(b/a)|
+a < b  =>  0 < log(b/a)
+log_x(b/a) < log_y(b/a)
+log_x(b) - log_x(a) < log_y(b) - log_y(a)
+log_x(b) + log_y(a) < log_y(b) + log_x(a)
+
+
+(x-1)*log_x(a) + (y-1)*log_y(b) >? (y-1)*log_y(a) + (x-1)*log_x(b)
+(x-1)*log_x(a) - (x-1)*log_x(b) >? (y-1)*log_y(a) - (y-1)*log_y(b)
+(x-1)*log_x(a/b) >? (y-1)*log_y(a/b) = (x-1)*log_x(a/b)/(x-1)*log_x(y)
+
+
+
+c(p) = p - 1 >= log2(p)
+c(a) = c(Prod[p^k_p])
+     = Sum[k_p*c(p)]
+     ≥ Sum[k_p*log2(p)]
+     = log2(a)
+
+further,
+2∤a  =>  c(a) >= 2*log3(a)
+
+
+
+log_x(y) = z
+y = x^z
+y^(1/z) = x
+1/z = log_y(x)

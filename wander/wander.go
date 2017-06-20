@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"time"
@@ -9,7 +10,9 @@ import (
 )
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	seed := time.Now().UnixNano()
+	fmt.Println("seed:", seed)
+	rand.Seed(seed)
 	audio.Play(&song{
 		composer: newComposer(),
 		Reverb:   audio.NewReverb(),
@@ -38,7 +41,7 @@ func (s *song) beat() {
 
 func (s *song) Sing() float64 {
 	s.EventDelay.Step()
-	x := audio.Saturate(s.MultiVoice.Sing()/8) / 2
+	x := s.MultiVoice.Sing() / 8 / 2
 	return audio.Saturate((2*x + s.Reverb.Filter(x)) / 3)
 }
 
