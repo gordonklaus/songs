@@ -388,8 +388,8 @@ func (m *Melody) newMinComplexity() minComplexity {
 				mindiv *= p
 			}
 			mindivComplexity += min * (p - 1)
-			G += float64(max * count * (p - 1))
-			GD += float64(tdiv * count * (p - 1))
+			G += float64((max + 1) * count * (p - 1))
+			GD += float64((tdiv + 1) * count * (p - 1))
 		}
 		divCounts = append(divCounts, divCount{mindiv, mindivComplexity, G})
 	}
@@ -413,7 +413,7 @@ func (mc minComplexity) estimate(a, b int) float64 {
 	G := 0.0
 	for i, divCount := range mc.divCounts {
 		p := primes[i]
-		if b%p == 0 {
+		if b%p == 0 { // || a%p == 0 ?
 			continue
 		}
 		G += divCount.G
@@ -427,7 +427,7 @@ func (mc minComplexity) estimate(a, b int) float64 {
 	B := float64(complexity(b))
 
 	N := float64(len(mc.history))
-	return (N+2)*(N-1)/2*float64(T) + N*N*(N-1)/2*B - 2*G + (N-2)*mc.D
+	return (N+2)*(N-1)/2*float64(T) + N*mc.D + N*N*(N-1)/2*B - 2*G
 }
 
 func (mc minComplexity) estimateNonDecreasingWithA(a, b int) float64 {
@@ -451,11 +451,11 @@ func (mc minComplexity) estimateNonDecreasingWithA(a, b int) float64 {
 	if math.IsInf(A, 0) {
 		panic("too much")
 	}
-	T := math.Log2(A/float64(mindiv)) + float64(mindivComplexity)
+	T := math.Log2(A/float64(mindiv)) + float64(mindivComplexity) // consider maxdiv (can it be nondecreasing?)
 	B := float64(complexity(b))
 
 	N := float64(len(mc.history))
-	return (N+2)*(N-1)/2*T + N*N*(N-1)/2*B - 2*G + (N-2)*mc.D
+	return (N+2)*(N-1)/2*T + N*mc.D + N*N*(N-1)/2*B - 2*G
 }
 
 func (mc minComplexity) estimateNonDecreasing(a, b int) float64 {
@@ -470,7 +470,7 @@ func (mc minComplexity) estimateNonDecreasing(a, b int) float64 {
 
 	N := float64(len(mc.history))
 	G := float64(mc.GD)
-	return (N+2)*(N-1)/2*T + N*N*(N-1)/2*B - 2*G + (N-2)*mc.D
+	return (N+2)*(N-1)/2*T + N*mc.D + N*N*(N-1)/2*B - 2*G
 }
 
 // func (mc minComplexity) minComplexity(a, b int) (float64, float64, float64) {

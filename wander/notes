@@ -1,6 +1,5 @@
 c(a, b) = c(a/gcd(a,b)) + c(b/gcd(a,b))
-        = c(a) - c(gcd(a,b)) + c(b) - c(gcd(a,b))
-        >= log2(a) + log2(b) - 2*c(gcd(a,b))
+        = c(a) + c(b) - 2*c(gcd(a,b))
 
 
 
@@ -9,12 +8,11 @@ C(D)  = (n+2)*(n-1)/2 * [c(a) + c(a-tb) + ...]
         - 2*[c(gcd(a-tb, db)) + ...]
         - 2*[c(gcd(a-t_1b, a-t_2b)) + ...]
       = (n+2)*(n-1)/2 * [c(a) + c(a-tb) + ...]
-        + n*n*(n-1)/2 * c(b)
-        + n*[c(d) + ...]
+        + n*[c(d) + ...] + n*n*(n-1)/2 * c(b)
         - 2*[c(gcd(a-tb, db)) + ...]
         - 2*[c(gcd(a-t_1b, a-t_2b)) + ...]
      >= (n+2)*(n-1)/2 * [c(a) + c(a-tb) + ...]
-        + n*[c(db) + ...]
+        + n*[c(d) + ...] + n*n*(n-1)/2 * c(b)
         - 2*(n+1)*[c(d) + ...]
       = (n+2)*(n-1)/2 * [c(a) + c(a-tb) + ...]
         + n*n*(n-1)/2 * c(b)
