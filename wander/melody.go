@@ -250,6 +250,7 @@ func (m *Melody) genNextDurations() []ratio {
 	amax := 0
 	amaxsum := 0
 	for b := 1; ; b++ {
+		mc.setB(b)
 		// fmt.Print("  b:", b)
 		for a := 1; ; a++ {
 			if gcd(a, b) != 1 {
@@ -297,6 +298,7 @@ func (m *Melody) genNextDurations() []ratio {
 
 type minComplexity struct {
 	history   []int
+	csa, csb  *complexitySum
 	D         float64
 	divCounts []divCount
 	coeff     []float64
@@ -399,14 +401,28 @@ func (m *Melody) newMinComplexity() minComplexity {
 		}
 	}
 
+	h2 := make([]int, len(history))
+	for i, t := range history {
+		h2[i] = -t
+	}
+
 	return minComplexity{
 		history:   history,
+		csb:       newComplexitySum(1, h2),
 		D:         D,
 		divCounts: divCounts,
 		coeff:     coeff,
 		GD:        GD,
 		lcm:       lcm_,
 	}
+}
+
+func (mc *minComplexity) setB(b int) {
+	D := make([]int, len(mc.history))
+	for i, t := range mc.history {
+		D[i] = -t * b
+	}
+	mc.csa = newComplexitySum(b, D)
 }
 
 func (mc minComplexity) estimate(a, b int) float64 {
@@ -444,33 +460,131 @@ func (mc minComplexity) estimateNonDecreasingWithA(a, b int) float64 {
 		G += divCount.G
 	}
 
-	A := 1.0
-	for _, t := range mc.history {
-		A *= float64(a - t*b)
-	}
-	if math.IsInf(A, 0) {
-		panic("too much")
-	}
-	T := math.Log2(A/float64(mindiv)) + float64(mindivComplexity) // consider maxdiv (can it be nondecreasing?)
+	T := mc.csa.lowerBoundA(a)
 	B := float64(complexity(b))
 
 	N := float64(len(mc.history))
-	return (N+2)*(N-1)/2*T + N*mc.D + N*N*(N-1)/2*B - 2*G
+	return (N+2)*(N-1)/2*float64(T) + N*mc.D + N*N*(N-1)/2*B - 2*G
 }
 
 func (mc minComplexity) estimateNonDecreasing(a, b int) float64 {
-	T := 0.0
-	for i, t := range mc.history {
-		T += math.Log2(float64(a-t*b)) * mc.coeff[i]
-	}
-	if math.IsInf(T, 0) {
-		panic("too much")
-	}
+	T := mc.csb.lowerBoundB(b)
 	B := math.Log2(float64(b))
 
 	N := float64(len(mc.history))
 	G := float64(mc.GD)
-	return (N+2)*(N-1)/2*T + N*mc.D + N*N*(N-1)/2*B - 2*G
+	return (N+2)*(N-1)/2*float64(T) + N*mc.D + N*N*(N-1)/2*B - 2*G
+}
+
+type complexitySum struct {
+	b      int
+	D      []int
+	dhmean float64
+	lb     []lowerBound
+	m, l   int
+}
+
+type lowerBound struct {
+	n, c int
+}
+
+func newComplexitySum(b int, D []int) *complexitySum {
+	dprod := 1
+	count := 0
+	for _, d := range D {
+		if d > 0 {
+			dprod *= d
+			count++
+		}
+	}
+	cs := &complexitySum{
+		D:      D,
+		dhmean: 1 / math.Pow(float64(dprod), 1/float64(count)),
+		m:      1,
+		l:      1,
+	}
+	return cs
+}
+
+func (cs *complexitySum) lowerBoundA(n int) int {
+	if len(cs.lb) > 1 && n >= cs.lb[1].n {
+		cs.lb = cs.lb[1:]
+		cs.l = int(math.Ceil(math.Exp2(float64(cs.lb[0].c) / float64(len(cs.D)))))
+	}
+	// fmt.Printf("n=%d\n", n)
+	for ; cs.m <= n || cs.m <= cs.l; cs.m++ {
+		if gcd(cs.m, cs.b) != 1 {
+			continue
+		}
+		// fmt.Printf("\tm=%d <= l=%d\n", cs.m, cs.l)
+		c := 0
+		for _, d := range cs.D {
+			c += complexity(cs.m + d)
+		}
+
+		i := len(cs.lb)
+		for ; i > 0; i-- {
+			if c > cs.lb[i-1].c {
+				break
+			}
+		}
+		if i < len(cs.lb) {
+			cs.lb = cs.lb[:i+1]
+			cs.lb[i].c = c
+		} else {
+			cs.lb = append(cs.lb, lowerBound{cs.m, c})
+			if len(cs.lb) > 1 && n >= cs.lb[1].n {
+				cs.lb = cs.lb[1:]
+				i = 0
+			}
+		}
+		if i == 0 {
+			cs.l = int(math.Ceil(math.Exp2(float64(cs.lb[0].c) / float64(len(cs.D)))))
+		}
+		// fmt.Printf("\tlb=%v l=%d\n", cs.lb, cs.l)
+	}
+
+	// fmt.Println()
+	return cs.lb[0].c
+}
+
+func (cs *complexitySum) lowerBoundB(n int) int {
+	if len(cs.lb) > 1 && n >= cs.lb[1].n {
+		cs.lb = cs.lb[1:]
+		cs.l = int(math.Ceil(math.Exp2(float64(cs.lb[0].c)/float64(len(cs.D)))) * cs.dhmean)
+	}
+	// fmt.Printf("n=%d\n", n)
+	for ; cs.m <= n || cs.m <= cs.l; cs.m++ {
+		// fmt.Printf("\tm=%d <= l=%d\n", cs.m, cs.l)
+		c := 0
+		for _, d := range cs.D {
+			c += complexity(1 + cs.m*d)
+		}
+
+		i := len(cs.lb)
+		for ; i > 0; i-- {
+			if c > cs.lb[i-1].c {
+				break
+			}
+		}
+		if i < len(cs.lb) {
+			cs.lb = cs.lb[:i+1]
+			cs.lb[i].c = c
+		} else {
+			cs.lb = append(cs.lb, lowerBound{cs.m, c})
+			if len(cs.lb) > 1 && n >= cs.lb[1].n {
+				cs.lb = cs.lb[1:]
+				i = 0
+			}
+		}
+		if i == 0 {
+			cs.l = int(math.Ceil(math.Exp2(float64(cs.lb[0].c)/float64(len(cs.D)))) * cs.dhmean)
+		}
+		// fmt.Printf("\tlb=%v l=%d\n", cs.lb, cs.l)
+	}
+
+	// fmt.Println()
+	return cs.lb[0].c
 }
 
 // func (mc minComplexity) minComplexity(a, b int) (float64, float64, float64) {
@@ -719,25 +833,25 @@ func (m *Melody) nextFrequencyComplexity(next ratio) int {
 	return next.complexity()
 }
 
-var complexityCache = map[int]int{}
+var complexityCache = []int{0}
 
 func complexity(n int) int {
-	if c, ok := complexityCache[n]; ok {
-		return c
-	}
-	c := 0
-	for m, d := 1, 2; m != n; d++ {
-		for {
-			md := m * d
-			if n%md != 0 {
-				break
+	for n >= len(complexityCache) {
+		n := len(complexityCache)
+		c := 0
+		for m, d := 1, 2; m != n; d++ {
+			for {
+				md := m * d
+				if n%md != 0 {
+					break
+				}
+				m = md
+				c += d - 1
 			}
-			m = md
-			c += d - 1
 		}
+		complexityCache = append(complexityCache, c)
 	}
-	complexityCache[n] = c
-	return c
+	return complexityCache[n]
 }
 
 func gcd(a, b int) int {
