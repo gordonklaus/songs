@@ -28,18 +28,21 @@ func TestMelody(t *testing.T) {
 }
 
 func TestComplexitySum(t *testing.T) {
-	D := []int{0, 1, 2, 4, 5}
-	cs := newComplexitySum(1, D)
+	D := []int{0}
+	// cs := newComplexitySum(1, D)
 	lbi := getLowerBound(1, 0, D)
 	prevc := 0
 	prevlb := 0
-	for n := 1; n <= 75; n++ {
+	for n := 1; n <= 20; n++ {
 		c := 0
 		for _, d := range D {
 			c += complexity(n + d)
 		}
 
-		lb := cs.lowerBoundA(n)
+		if n >= lbi.n1 {
+			lbi.increment()
+		}
+		lb := lbi.value
 		if lb > c {
 			t.Fatalf("lower bound %d exceeds complexity %d", lb, c)
 		}
@@ -50,20 +53,17 @@ func TestComplexitySum(t *testing.T) {
 			t.Fatalf("lower bound increased to %d but previous lower bound %d did not equal previous complexity %c", lb, prevlb, prevc)
 		}
 
-		if n >= lbi.n1 {
-			lbi.increment()
-		}
-		lb2 := lbi.value
-		if lb2 != lb {
-			t.Fatalf("lb2=%d lb1=%d\n%v\n%v\n%d", lb2, lb, lbi.lb.lb.steps, lbi.lb.lb.pending, lbi.lb.lb.m)
-		}
-		fmt.Println(n, c, lb, lb2)
+		// lb2 := cs.lowerBoundA(n)
+		// if lb2 != lb {
+		// 	t.Fatalf("lb2=%d lb1=%d\n%v\n%v\n%d", lb2, lb, lbi.lb.lb.steps, lbi.lb.lb.pending, lbi.lb.lb.m)
+		// }
+		fmt.Println(n, c, lb)
 
 		prevlb = lb
 		prevc = c
 	}
-	fmt.Println(cs.m, cs.l)
-	fmt.Println(cs.lb)
+	// fmt.Println(cs.m, cs.l)
+	// fmt.Println(cs.lb)
 	fmt.Println(lbi.lb.lb.m, lbi.lb.lb.l)
 	fmt.Println(lbi.lb.lb.pending)
 }
