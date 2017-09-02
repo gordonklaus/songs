@@ -297,12 +297,12 @@ func (m *Melody) genNextDurations() []ratio {
 }
 
 type minComplexity struct {
-	history   []int
-	csa, csb  *complexitySum
-	D, G, B   float64
-	divCounts []divCount
-	GD        float64
-	lcm       int
+	history                          []int
+	lowerBoundAIter, lowerBoundBIter *lowerBoundIterator
+	D, G, B                          float64
+	divCounts                        []divCount
+	GD                               float64
+	lcm                              int
 }
 
 type divCount struct {
@@ -381,8 +381,8 @@ func (m *Melody) newMinComplexity() minComplexity {
 	}
 
 	return minComplexity{
-		history:   history,
-		csb:       newComplexitySum(1, h2),
+		history: history,
+		// csb:       newComplexitySum(1, h2),
 		D:         D,
 		divCounts: divCounts,
 		GD:        GD,
@@ -393,9 +393,9 @@ func (m *Melody) newMinComplexity() minComplexity {
 func (mc *minComplexity) setB(b int) {
 	D := make([]int, len(mc.history))
 	for i, t := range mc.history {
-		D[i] = -t * b
+		D[len(D)-i-1] = -t * b
 	}
-	mc.csa = newComplexitySum(b, D)
+	mc.lowerBoundAIter = getLowerBound(b, 0, D)
 
 	G := 0.0
 	for i, divCount := range mc.divCounts {
@@ -432,7 +432,10 @@ func (mc minComplexity) estimate(a, b int) float64 {
 }
 
 func (mc minComplexity) estimateNonDecreasingWithA(a int) float64 {
-	T := mc.csa.lowerBoundA(a)
+	if a >= mc.lowerBoundAIter.n1 {
+		mc.lowerBoundAIter.increment()
+	}
+	T := mc.lowerBoundAIter.value
 
 	N := float64(len(mc.history))
 	return (N+2)*(N-1)/2*float64(T) + N*mc.D + N*N*(N-1)/2*mc.B - 2*mc.G
@@ -440,123 +443,12 @@ func (mc minComplexity) estimateNonDecreasingWithA(a int) float64 {
 
 func (mc minComplexity) estimateNonDecreasingWithB(b int) float64 {
 	// assumes a === 1
-	T := mc.csb.lowerBoundB(b)
+	T := 0 //mc.csb.lowerBoundB(b)
 	B := math.Log2(float64(b))
 
 	N := float64(len(mc.history))
 	G := float64(mc.GD)
 	return (N+2)*(N-1)/2*float64(T) + N*mc.D + N*N*(N-1)/2*B - 2*G
-}
-
-type complexitySum struct {
-	b      int
-	D      []int
-	dhmean float64
-	lb     []lowerBound
-	m, l   int
-}
-
-type lowerBound struct {
-	n, c int
-}
-
-func newComplexitySum(b int, D []int) *complexitySum {
-	dprod := 1
-	count := 0
-	for _, d := range D {
-		if d > 0 {
-			dprod *= d
-			count++
-		}
-	}
-	cs := &complexitySum{
-		D:      D,
-		dhmean: 1 / math.Pow(float64(dprod), 1/float64(count)),
-		m:      1,
-		l:      1,
-	}
-	return cs
-}
-
-func (cs *complexitySum) lowerBoundA(n int) int {
-	if len(cs.lb) > 1 && n >= cs.lb[1].n {
-		cs.lb = cs.lb[1:]
-		cs.l = int(math.Ceil(math.Exp2(float64(cs.lb[0].c) / float64(len(cs.D)))))
-	}
-	// fmt.Printf("n=%d\n", n)
-	for ; cs.m <= n || cs.m <= cs.l; cs.m++ {
-		if gcd(cs.m, cs.b) != 1 {
-			continue
-		}
-		// fmt.Printf("\tm=%d <= l=%d\n", cs.m, cs.l)
-		c := 0
-		for _, d := range cs.D {
-			c += complexity(cs.m + d)
-		}
-
-		i := len(cs.lb)
-		for ; i > 0; i-- {
-			if c > cs.lb[i-1].c {
-				break
-			}
-		}
-		if i < len(cs.lb) {
-			cs.lb = cs.lb[:i+1]
-			cs.lb[i].c = c
-		} else {
-			cs.lb = append(cs.lb, lowerBound{cs.m, c})
-			if len(cs.lb) > 1 && n >= cs.lb[1].n {
-				cs.lb = cs.lb[1:]
-				i = 0
-			}
-		}
-		if i == 0 {
-			cs.l = int(math.Ceil(math.Exp2(float64(cs.lb[0].c) / float64(len(cs.D)))))
-		}
-		// fmt.Printf("\tlb=%v l=%d\n", cs.lb, cs.l)
-	}
-
-	// fmt.Println()
-	return cs.lb[0].c
-}
-
-func (cs *complexitySum) lowerBoundB(n int) int {
-	if len(cs.lb) > 1 && n >= cs.lb[1].n {
-		cs.lb = cs.lb[1:]
-		cs.l = int(math.Ceil(math.Exp2(float64(cs.lb[0].c)/float64(len(cs.D)))) * cs.dhmean)
-	}
-	// fmt.Printf("n=%d\n", n)
-	for ; cs.m <= n || cs.m <= cs.l; cs.m++ {
-		// fmt.Printf("\tm=%d <= l=%d\n", cs.m, cs.l)
-		c := 0
-		for _, d := range cs.D {
-			c += complexity(1 + cs.m*d)
-		}
-
-		i := len(cs.lb)
-		for ; i > 0; i-- {
-			if c > cs.lb[i-1].c {
-				break
-			}
-		}
-		if i < len(cs.lb) {
-			cs.lb = cs.lb[:i+1]
-			cs.lb[i].c = c
-		} else {
-			cs.lb = append(cs.lb, lowerBound{cs.m, c})
-			if len(cs.lb) > 1 && n >= cs.lb[1].n {
-				cs.lb = cs.lb[1:]
-				i = 0
-			}
-		}
-		if i == 0 {
-			cs.l = int(math.Ceil(math.Exp2(float64(cs.lb[0].c)/float64(len(cs.D)))) * cs.dhmean)
-		}
-		// fmt.Printf("\tlb=%v l=%d\n", cs.lb, cs.l)
-	}
-
-	// fmt.Println()
-	return cs.lb[0].c
 }
 
 var primes = []int{2, 3}
