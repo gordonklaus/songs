@@ -139,11 +139,11 @@ func (lb *lowerBound) advance() {
 
 	for ; ; lb.m++ {
 		if lb.m >= lb.sum.n {
-			if lb.pending < len(lb.steps) && lb.steps[lb.pending].value <= lb.sum.value {
-				lb.pending++
-				return
-			}
 			lb.sum.increment()
+		}
+		if lb.pending < len(lb.steps) && lb.steps[lb.pending].value <= lb.sum.value {
+			lb.pending++
+			return
 		}
 
 		if gcd(lb.m, lb.b) != 1 {
@@ -198,4 +198,9 @@ func (lbs *lowerBoundSum) increment() {
 	lbs.value -= lbiMinN1.value
 	lbiMinN1.increment()
 	lbs.value += lbiMinN1.value
+
+	// for _, lbi := range lbs.lbis {
+	// 	fmt.Println(lbi.n0, "--", lbi.n1)
+	// }
+	// fmt.Println("---")
 }

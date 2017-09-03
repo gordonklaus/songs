@@ -66,6 +66,7 @@ func TestComplexitySum(t *testing.T) {
 	// fmt.Println(cs.lb)
 	fmt.Println(lbi.lb.lb.m)
 	fmt.Println(lbi.lb.lb.steps, lbi.lb.lb.pending)
+	fmt.Println("complexityCache:", len(complexityCache))
 }
 
 func TestProbabilitySum(t *testing.T) {
