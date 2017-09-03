@@ -45,8 +45,7 @@ type lowerBoundIterator struct {
 }
 
 func newLowerBoundIterator(lb *offsetLowerBound) *lowerBoundIterator {
-	lbi := &lowerBoundIterator{lb: lb, i: -1}
-	lb.lb.advance()
+	lbi := &lowerBoundIterator{lb: lb}
 	lbi.increment()
 	return lbi
 }
@@ -54,16 +53,17 @@ func newLowerBoundIterator(lb *offsetLowerBound) *lowerBoundIterator {
 func (lbi *lowerBoundIterator) increment() {
 	lbi.i++
 	lb := lbi.lb.lb
-	if lbi.i+1 >= len(lb.steps) {
+	if lbi.i >= lb.pending || lbi.i >= len(lb.steps) {
 		lb.advance()
 	}
-	step0 := lb.steps[lbi.i]
-	step1 := lb.steps[lbi.i+1]
+	step0 := lb.steps[lbi.i-1]
+	step1 := lb.steps[lbi.i]
 	lbi.n0 = step0.n - lbi.lb.offset
 	lbi.n1 = step1.n - lbi.lb.offset
 	lbi.value = step0.value
 }
 
+// TODO: merge into lowerBoundIterator
 type offsetLowerBound struct {
 	offset int
 	lb     *lowerBound
@@ -82,8 +82,8 @@ type lowerBound struct {
 	partials []*lowerBoundIterator
 
 	l, m    int
-	pending []lowerBoundStep
 	steps   []lowerBoundStep
+	pending int
 }
 
 type lowerBoundStep struct {
@@ -120,42 +120,43 @@ func newLowerBound(b int, D []int) *lowerBound {
 		// 	partials = append(partials, getLowerBound(b, d, []int{0}))
 		// }
 	}
-	return &lowerBound{
+	lb := &lowerBound{
 		b:        b,
 		D:        D,
 		partials: partials,
 		m:        1,
 	}
+	lb.advance()
+	return lb
 }
 
 func (lb *lowerBound) advance() {
-	for ; lb.m < lb.l || len(lb.pending) < 2; lb.m++ {
+	for ; lb.m < lb.l || lb.pending == len(lb.steps); lb.m++ {
 		fmt.Println(lb.D, "advance", lb.m, lb.l)
 		if gcd(lb.m, lb.b) != 1 {
 			continue
 		}
 		value := lb.evaluate(lb.m)
 
-		i := len(lb.pending)
-		for ; i > 0; i-- {
-			if value > lb.pending[i-1].value {
+		i := len(lb.steps)
+		for ; i >= lb.pending && i > 0; i-- {
+			if value > lb.steps[i-1].value {
 				break
 			}
 		}
-		if i < len(lb.pending) {
-			lb.pending = lb.pending[:i+1]
-			lb.pending[i].value = value
+		if i < len(lb.steps) {
+			lb.steps = lb.steps[:i+1]
+			lb.steps[i].value = value
 		} else {
-			lb.pending = append(lb.pending, lowerBoundStep{lb.m, value})
+			lb.steps = append(lb.steps, lowerBoundStep{lb.m, value})
 		}
-		fmt.Println("pending:", lb.pending)
-		if i == 0 {
+		fmt.Println("steps:", lb.steps, lb.pending)
+		if i <= lb.pending {
 			lb.updateLimit()
 		}
 	}
 
-	lb.steps = append(lb.steps, lb.pending[0])
-	lb.pending = lb.pending[1:]
+	lb.pending++
 	fmt.Println(lb.D, "advanced", lb.steps, lb.pending)
 	lb.updateLimit()
 }
@@ -169,7 +170,12 @@ func (lb *lowerBound) evaluate(n int) int {
 }
 
 func (lb *lowerBound) updateLimit() {
-	value := lb.pending[0].value
+	value := 0
+	if lb.pending < len(lb.steps) {
+		value = lb.steps[lb.pending].value
+	} else if len(lb.steps) > 0 {
+		value = lb.steps[len(lb.steps)-1].value
+	}
 
 	if len(lb.D) == 1 {
 		lb.l = 1 << uint(value)
@@ -202,5 +208,5 @@ func (lb *lowerBound) updateLimit() {
 	// for _, plb := range lb.partials {
 	// 	fmt.Println("+", plb.lb.lb.steps)
 	// }
-	// fmt.Println("-", lb.D, lb.m, lb.l, lb.pending)
+	// fmt.Println("-", lb.D, lb.m, lb.l, lb.steps)
 }
