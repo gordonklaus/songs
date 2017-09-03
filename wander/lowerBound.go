@@ -131,6 +131,16 @@ func newLowerBound(b int, D []int) *lowerBound {
 }
 
 func (lb *lowerBound) advance() {
+	if len(lb.D) == 1 {
+		n := 1
+		if lb.pending > 0 {
+			n = 1 + 1<<uint(lb.pending-1)
+		}
+		lb.steps = append(lb.steps, lowerBoundStep{n, lb.pending})
+		lb.pending++
+		return
+	}
+
 	for ; lb.m < lb.l || lb.pending == len(lb.steps); lb.m++ {
 		fmt.Println(lb.D, "advance", lb.m, lb.l)
 		if gcd(lb.m, lb.b) != 1 {
@@ -175,12 +185,6 @@ func (lb *lowerBound) updateLimit() {
 		value = lb.steps[lb.pending].value
 	} else if len(lb.steps) > 0 {
 		value = lb.steps[len(lb.steps)-1].value
-	}
-
-	if len(lb.D) == 1 {
-		lb.l = 1 << uint(value)
-		fmt.Println("limit updated:", lb.l)
-		return
 	}
 
 	for {
