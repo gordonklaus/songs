@@ -1,9 +1,5 @@
 package main
 
-import (
-	"fmt"
-)
-
 func getLowerBound(b, offset int, D []int) *lowerBoundIterator {
 	// if len(D) > 2 {
 	// 	return newLowerBoundIterator(newOffsetLowerBound(b, offset, D))
@@ -77,11 +73,11 @@ func newOffsetLowerBound(b, offset int, D []int) *offsetLowerBound {
 }
 
 type lowerBound struct {
-	b        int
-	D        []int
-	partials []*lowerBoundIterator
+	b   int
+	D   []int
+	sum *lowerBoundSum
 
-	l, m    int
+	m       int
 	steps   []lowerBoundStep
 	pending int
 }
@@ -121,10 +117,10 @@ func newLowerBound(b int, D []int) *lowerBound {
 		// }
 	}
 	lb := &lowerBound{
-		b:        b,
-		D:        D,
-		partials: partials,
-		m:        1,
+		b:   b,
+		D:   D,
+		sum: newLowerBoundSum(partials),
+		m:   1,
 	}
 	lb.advance()
 	return lb
@@ -141,8 +137,16 @@ func (lb *lowerBound) advance() {
 		return
 	}
 
-	for ; lb.m < lb.l || lb.pending == len(lb.steps); lb.m++ {
-		fmt.Println(lb.D, "advance", lb.m, lb.l)
+	for ; ; lb.m++ {
+		// fmt.Println(lb.D, "advance", lb.m)
+
+		if lb.m >= lb.sum.n {
+			if lb.pending < len(lb.steps) && lb.steps[lb.pending].value <= lb.sum.value {
+				break
+			}
+			lb.sum.increment()
+		}
+
 		if gcd(lb.m, lb.b) != 1 {
 			continue
 		}
@@ -160,15 +164,11 @@ func (lb *lowerBound) advance() {
 		} else {
 			lb.steps = append(lb.steps, lowerBoundStep{lb.m, value})
 		}
-		fmt.Println("steps:", lb.steps, lb.pending)
-		if i <= lb.pending {
-			lb.updateLimit()
-		}
+		// fmt.Println("steps:", lb.steps, lb.pending)
 	}
 
 	lb.pending++
-	fmt.Println(lb.D, "advanced", lb.steps, lb.pending)
-	lb.updateLimit()
+	// fmt.Println(lb.D, "advanced", lb.steps, lb.pending)
 }
 
 func (lb *lowerBound) evaluate(n int) int {
@@ -179,38 +179,28 @@ func (lb *lowerBound) evaluate(n int) int {
 	return value
 }
 
-func (lb *lowerBound) updateLimit() {
+type lowerBoundSum struct {
+	lbis     []*lowerBoundIterator
+	n, value int
+}
+
+func newLowerBoundSum(lbis []*lowerBoundIterator) *lowerBoundSum {
 	value := 0
-	if lb.pending < len(lb.steps) {
-		value = lb.steps[lb.pending].value
-	} else if len(lb.steps) > 0 {
-		value = lb.steps[len(lb.steps)-1].value
+	for _, lbi := range lbis {
+		value += lbi.value
 	}
+	return &lowerBoundSum{lbis, 1, value}
+}
 
-	for {
-		weaklb := 0
-		maxN0 := 0
-		plbMinN1 := lb.partials[0]
-		for _, plb := range lb.partials {
-			weaklb += plb.value
-			if plb.n0 > maxN0 {
-				maxN0 = plb.n0
-			}
-			if plb.n1 < plbMinN1.n1 {
-				plbMinN1 = plb
-			}
+func (lbs *lowerBoundSum) increment() {
+	lbiMinN1 := lbs.lbis[0]
+	for _, lbi := range lbs.lbis {
+		if lbi.n1 < lbiMinN1.n1 {
+			lbiMinN1 = lbi
 		}
-		if weaklb > value {
-			lb.l = maxN0
-			break
-		}
-		plbMinN1.increment()
 	}
-
-	fmt.Println("limit updated:", lb.l)
-
-	// for _, plb := range lb.partials {
-	// 	fmt.Println("+", plb.lb.lb.steps)
-	// }
-	// fmt.Println("-", lb.D, lb.m, lb.l, lb.steps)
+	lbs.n = lbiMinN1.n1
+	lbs.value -= lbiMinN1.value
+	lbiMinN1.increment()
+	lbs.value += lbiMinN1.value
 }
