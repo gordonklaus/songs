@@ -1,9 +1,9 @@
 package main
 
 func getLowerBound(b, offset int, D []int) *lowerBoundIterator {
-	// if len(D) > 2 {
-	// 	return newLowerBoundIterator(newOffsetLowerBound(b, offset, D))
-	// }
+	if len(D) > 2 {
+		return newLowerBoundIterator(newOffsetLowerBound(b, offset, D))
+	}
 	lbc := theLowerBoundCache.get(D)
 	if lbc.lb == nil {
 		lbc.lb = newLowerBound(b, D)
@@ -73,11 +73,11 @@ func newOffsetLowerBound(b, offset int, D []int) *offsetLowerBound {
 }
 
 type lowerBound struct {
-	b   int
-	D   []int
-	sum *lowerBoundSum
+	b int
+	D []int
 
 	m       int
+	sum     *lowerBoundSum
 	steps   []lowerBoundStep
 	pending int
 }
@@ -88,30 +88,30 @@ type lowerBoundStep struct {
 
 func newLowerBound(b int, D []int) *lowerBound {
 	partials := []*lowerBoundIterator{}
-	// if len(D) == 2 {
-	// 	for _, d := range D {
-	// 		partials = append(partials, getLowerBound(b, d, []int{0}))
-	// 	}
-	// }
-	if len(D) >= 2 {
-		i := len(D) / 2
-		D2 := make([]int, len(D)-i)
-		for j := range D2 {
-			D2[j] = D[i+j] - D[i]
+	if len(D) == 2 {
+		for _, d := range D {
+			partials = append(partials, getLowerBound(b, d, []int{0}))
 		}
-		partials = append(
-			partials,
-			getLowerBound(b, 0, D[:i]),
-			getLowerBound(b, D[i], D2),
-		)
-		// for i := 1; i < len(D); i += 2 {
-		// 	d0 := D[i-1]
-		// 	d1 := D[i]
-		// 	partials = append(partials, getLowerBound(b, d0, []int{0, d1 - d0}))
+	}
+	if len(D) > 2 {
+		// i := len(D) / 2
+		// D2 := make([]int, len(D)-i)
+		// for j := range D2 {
+		// 	D2[j] = D[i+j] - D[i]
 		// }
-		// if len(D)%2 == 1 {
-		// 	partials = append(partials, getLowerBound(b, D[len(D)-1], []int{0}))
-		// }
+		// partials = append(
+		// 	partials,
+		// 	getLowerBound(b, 0, D[:i]),
+		// 	getLowerBound(b, D[i], D2),
+		// )
+		for i := 1; i < len(D); i += 2 {
+			d0 := D[i-1]
+			d1 := D[i]
+			partials = append(partials, getLowerBound(b, d0, []int{0, d1 - d0}))
+		}
+		if len(D)%2 == 1 {
+			partials = append(partials, getLowerBound(b, D[len(D)-1], []int{0}))
+		}
 		// for _, d := range D {
 		// 	partials = append(partials, getLowerBound(b, d, []int{0}))
 		// }
@@ -138,11 +138,10 @@ func (lb *lowerBound) advance() {
 	}
 
 	for ; ; lb.m++ {
-		// fmt.Println(lb.D, "advance", lb.m)
-
 		if lb.m >= lb.sum.n {
 			if lb.pending < len(lb.steps) && lb.steps[lb.pending].value <= lb.sum.value {
-				break
+				lb.pending++
+				return
 			}
 			lb.sum.increment()
 		}
@@ -164,11 +163,7 @@ func (lb *lowerBound) advance() {
 		} else {
 			lb.steps = append(lb.steps, lowerBoundStep{lb.m, value})
 		}
-		// fmt.Println("steps:", lb.steps, lb.pending)
 	}
-
-	lb.pending++
-	// fmt.Println(lb.D, "advanced", lb.steps, lb.pending)
 }
 
 func (lb *lowerBound) evaluate(n int) int {

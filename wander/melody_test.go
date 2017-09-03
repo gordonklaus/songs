@@ -28,12 +28,12 @@ func TestMelody(t *testing.T) {
 }
 
 func TestComplexitySum(t *testing.T) {
-	D := []int{0}
+	D := []int{0, 1, 2, 4, 5}
 	// cs := newComplexitySum(1, D)
 	lbi := getLowerBound(1, 0, D)
 	prevc := 0
 	prevlb := 0
-	for n := 1; n <= 20; n++ {
+	for n := 1; n <= 44; n++ {
 		c := 0
 		for _, d := range D {
 			c += complexity(n + d)
@@ -64,8 +64,8 @@ func TestComplexitySum(t *testing.T) {
 	}
 	// fmt.Println(cs.m, cs.l)
 	// fmt.Println(cs.lb)
-	fmt.Println(lbi.lb.lb.m, lbi.lb.lb.l)
-	fmt.Println(lbi.lb.lb.pending)
+	fmt.Println(lbi.lb.lb.m)
+	fmt.Println(lbi.lb.lb.steps, lbi.lb.lb.pending)
 }
 
 func TestProbabilitySum(t *testing.T) {
@@ -80,10 +80,14 @@ func TestProbabilitySum(t *testing.T) {
 
 func BenchmarkComplexitySum(b *testing.B) {
 	D := []int{0, 1, 2, 4, 5}
+	getLowerBound(1, 0, D)
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cs := newComplexitySum(1, D)
-		for n := 1; n <= 75; n++ {
-			cs.lowerBoundA(n)
+		lbi := getLowerBound(1, 0, D)
+		for n := 1; n <= 44; n++ {
+			if n >= lbi.n1 {
+				lbi.increment()
+			}
 		}
 	}
 }
