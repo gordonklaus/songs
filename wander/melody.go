@@ -395,7 +395,7 @@ func (mc *minComplexity) setB(b int) {
 	for i, t := range mc.history {
 		D[len(D)-i-1] = -t * b
 	}
-	mc.lowerBoundAIter = getLowerBound(b, 0, D)
+	mc.lowerBoundAIter = getLowerBound(b, D)
 
 	G := 0.0
 	for i, divCount := range mc.divCounts {

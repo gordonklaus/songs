@@ -1,9 +1,16 @@
 package main
 
-func getLowerBound(b, offset int, D []int) *lowerBoundIterator {
-	if len(D) > 2 {
-		return newLowerBoundIterator(newOffsetLowerBound(b, offset, D))
+func getLowerBound(b int, D []int) *lowerBoundIterator {
+	offset := D[0]
+	D = append([]int{}, D...)
+	for i := range D {
+		D[i] -= offset
 	}
+
+	// if len(D) > 3 {
+	// 	return newLowerBoundIterator(newOffsetLowerBound(b, offset, D))
+	// }
+
 	lbc := theLowerBoundCache.get(D)
 	if lbc.lb == nil {
 		lbc.lb = newLowerBound(b, D)
@@ -88,34 +95,16 @@ type lowerBoundStep struct {
 
 func newLowerBound(b int, D []int) *lowerBound {
 	partials := []*lowerBoundIterator{}
-	if len(D) == 2 {
+	if PD := partition(D); len(PD) > 1 {
+		for _, D := range PD {
+			partials = append(partials, getLowerBound(b, D))
+		}
+	} else if len(D) > 1 {
 		for _, d := range D {
-			partials = append(partials, getLowerBound(b, d, []int{0}))
+			partials = append(partials, getLowerBound(b, []int{d}))
 		}
 	}
-	if len(D) > 2 {
-		// i := len(D) / 2
-		// D2 := make([]int, len(D)-i)
-		// for j := range D2 {
-		// 	D2[j] = D[i+j] - D[i]
-		// }
-		// partials = append(
-		// 	partials,
-		// 	getLowerBound(b, 0, D[:i]),
-		// 	getLowerBound(b, D[i], D2),
-		// )
-		for i := 1; i < len(D); i += 2 {
-			d0 := D[i-1]
-			d1 := D[i]
-			partials = append(partials, getLowerBound(b, d0, []int{0, d1 - d0}))
-		}
-		if len(D)%2 == 1 {
-			partials = append(partials, getLowerBound(b, D[len(D)-1], []int{0}))
-		}
-		// for _, d := range D {
-		// 	partials = append(partials, getLowerBound(b, d, []int{0}))
-		// }
-	}
+
 	lb := &lowerBound{
 		b:   b,
 		D:   D,
@@ -126,7 +115,34 @@ func newLowerBound(b int, D []int) *lowerBound {
 	return lb
 }
 
+func partition(D []int) [][]int {
+	const maxPartitionSize = 3
+
+	if len(D) <= maxPartitionSize {
+		return [][]int{D}
+	}
+
+	// i := len(D) / 2
+	// return append(partition(D[:i]), partition(D[i:])...)
+
+	switch maxPartitionSize {
+	case 2:
+		return append(partition(D[2:]), D[:2])
+	case 3:
+		if len(D)%3 == 1 {
+			return append(partition(D[2:]), D[:2])
+		}
+		return append(partition(D[3:]), D[:3])
+	default:
+		panic("not implemented")
+	}
+}
+
 func (lb *lowerBound) advance() {
+	// defer func() {
+	// 	fmt.Println(lb.D, " --- ", lb.steps[:lb.pending], "-", lb.m)
+	// }()
+
 	if len(lb.D) == 1 {
 		n := 1
 		if lb.pending > 0 {
