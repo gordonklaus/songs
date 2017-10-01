@@ -1,5 +1,11 @@
 package main
 
+import (
+	"math"
+	"sort"
+)
+
+// TODO: b
 func getLowerBound(b int, D []int) *lowerBoundIterator {
 	offset := D[0]
 	D = append([]int{}, D...)
@@ -7,9 +13,9 @@ func getLowerBound(b int, D []int) *lowerBoundIterator {
 		D[i] -= offset
 	}
 
-	// if len(D) > 3 {
-	// 	return newLowerBoundIterator(newOffsetLowerBound(b, offset, D))
-	// }
+	if len(D) > 2 {
+		return newLowerBoundIterator(newOffsetLowerBound(b, offset, D))
+	}
 
 	lbc := theLowerBoundCache.get(D)
 	if lbc.lb == nil {
@@ -56,7 +62,7 @@ func newLowerBoundIterator(lb *offsetLowerBound) *lowerBoundIterator {
 func (lbi *lowerBoundIterator) increment() {
 	lbi.i++
 	lb := lbi.lb.lb
-	if lbi.i >= lb.pending || lbi.i >= len(lb.steps) {
+	for lbi.i >= lb.pending {
 		lb.advance()
 	}
 	step0 := lb.steps[lbi.i-1]
@@ -99,24 +105,22 @@ func newLowerBound(b int, D []int) *lowerBound {
 		for _, D := range PD {
 			partials = append(partials, getLowerBound(b, D))
 		}
-	} else if len(D) > 1 {
+	} else if len(D) > 2 {
 		for _, d := range D {
 			partials = append(partials, getLowerBound(b, []int{d}))
 		}
 	}
 
-	lb := &lowerBound{
+	return &lowerBound{
 		b:   b,
 		D:   D,
 		sum: newLowerBoundSum(partials),
 		m:   1,
 	}
-	lb.advance()
-	return lb
 }
 
 func partition(D []int) [][]int {
-	const maxPartitionSize = 3
+	const maxPartitionSize = 2
 
 	if len(D) <= maxPartitionSize {
 		return [][]int{D}
@@ -127,6 +131,7 @@ func partition(D []int) [][]int {
 
 	switch maxPartitionSize {
 	case 2:
+		// TODO:  No 1-term partitions.
 		return append(partition(D[2:]), D[:2])
 	case 3:
 		if len(D)%3 == 1 {
@@ -139,8 +144,10 @@ func partition(D []int) [][]int {
 }
 
 func (lb *lowerBound) advance() {
+	// fmt.Println(lb.D, " --- ", lb.steps[:lb.pending], "-", lb.m)
 	// defer func() {
 	// 	fmt.Println(lb.D, " --- ", lb.steps[:lb.pending], "-", lb.m)
+	// 	fmt.Println()
 	// }()
 
 	if len(lb.D) == 1 {
@@ -150,6 +157,13 @@ func (lb *lowerBound) advance() {
 		}
 		lb.steps = append(lb.steps, lowerBoundStep{n, lb.pending})
 		lb.pending++
+		return
+	}
+
+	if len(lb.D) == 2 {
+		for next := lb.pending + 1; lb.pending < next; {
+			advanceTwoTermLowerBounds()
+		}
 		return
 	}
 
@@ -219,4 +233,84 @@ func (lbs *lowerBoundSum) increment() {
 	// 	fmt.Println(lbi.n0, "--", lbi.n1)
 	// }
 	// fmt.Println("---")
+}
+
+var inverseComplexityCache = [][]int{{1}}
+
+func advanceTwoTermLowerBounds() {
+	c := len(inverseComplexityCache)
+
+	ics := []int{}
+	for i := 0; ; i++ {
+		p := prime(i)
+		if p-1 > c {
+			break
+		}
+		if c%(p-1) != 0 {
+			continue
+		}
+		for _, n := range inverseComplexityCache[c-p+1] {
+			if n > math.MaxInt64/p {
+				break
+			}
+			ics = append(ics, n*p)
+		}
+	}
+	inverseComplexityCache = append(inverseComplexityCache, uniqueSort(ics))
+
+	for c1, c2 := 0, c; c1 <= c2; c1, c2 = c1+1, c2-1 {
+		for _, n1 := range inverseComplexityCache[c1] {
+			for _, n2 := range inverseComplexityCache[c2] {
+				n := n1 + 1
+				d := n2 - n1
+				if n2 < n1 {
+					n = n2 + 1
+					d = n1 - n2
+				}
+
+				if d > 128 {
+					if n1 < n2 {
+						break
+					}
+					continue
+				}
+
+				lbc := theLowerBoundCache.get([]int{0, d})
+				if lbc.lb == nil {
+					lbc.lb = newLowerBound(1, []int{0, d})
+				}
+				lb := lbc.lb
+
+				if len(lb.steps) == 0 {
+					lb.steps = []lowerBoundStep{{1, 0}}
+				}
+
+				numSteps := len(lb.steps)
+				lastStep := &lb.steps[numSteps-1]
+				var lastStep2 *lowerBoundStep
+				if numSteps > 1 {
+					lastStep2 = &lb.steps[numSteps-2]
+				}
+				if lastStep2 == nil || lastStep2.value < c && lastStep.n < n {
+					lastStep.value = c
+					lb.steps = append(lb.steps, lowerBoundStep{n, 0})
+					lb.pending++
+				} else if lastStep2.value == c && lastStep.n < n {
+					lastStep.n = n
+				}
+			}
+		}
+	}
+}
+
+func uniqueSort(s []int) []int {
+	sort.Ints(s)
+	i := 0
+	for j := 0; j < len(s); i++ {
+		s[i] = s[j]
+		for j < len(s) && s[i] == s[j] {
+			j++
+		}
+	}
+	return s[:i]
 }
