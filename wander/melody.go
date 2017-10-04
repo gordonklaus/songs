@@ -382,7 +382,7 @@ func (m *Melody) newMinComplexity() minComplexity {
 
 	return minComplexity{
 		history: history,
-		// csb:       newComplexitySum(1, h2),
+		// lowerBoundBIter: getLowerBoundB(h2),
 		D:         D,
 		divCounts: divCounts,
 		GD:        GD,
@@ -395,7 +395,7 @@ func (mc *minComplexity) setB(b int) {
 	for i, t := range mc.history {
 		D[len(D)-i-1] = -t * b
 	}
-	mc.lowerBoundAIter = getLowerBound(b, D)
+	mc.lowerBoundAIter = getLowerBoundA(b, D)
 
 	G := 0.0
 	for i, divCount := range mc.divCounts {

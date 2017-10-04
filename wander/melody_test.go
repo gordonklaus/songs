@@ -30,7 +30,7 @@ func TestMelody(t *testing.T) {
 func TestComplexitySum(t *testing.T) {
 	D := []int{0, 3, 5, 12, 13, 19, 21, 28}
 	// cs := newComplexitySum(1, D)
-	lbi := getLowerBound(1, D)
+	lbi := getLowerBoundA(1, D)
 	prevc := 0
 	prevlb := 0
 	for n := 1; n <= 200; n++ {
@@ -64,8 +64,8 @@ func TestComplexitySum(t *testing.T) {
 	}
 	// fmt.Println(cs.m, cs.l)
 	// fmt.Println(cs.lb)
-	fmt.Println(lbi.lb.lb.m)
-	fmt.Println(lbi.lb.lb.steps, lbi.lb.lb.pending)
+	fmt.Println(lbi.lb.(*lowerBoundSum).m)
+	fmt.Println(lbi.lb.getSteps())
 	fmt.Println("complexityCache:", len(complexityCache))
 	inverseComplexityCacheSize := 0
 	for _, ns := range inverseComplexityCache {
@@ -77,19 +77,19 @@ func TestComplexitySum(t *testing.T) {
 func BenchmarkComplexitySum(b *testing.B) {
 	D := []int{0, 3, 5, 12, 13, 19, 21, 28}
 	for i := 0; i < b.N; i++ {
-		lbi := getLowerBound(1, D)
+		lbi := getLowerBoundA(1, D)
 		for lbi.n1 < 200 {
 			lbi.increment()
 		}
 	}
 }
 
-func BenchmarkTwoTermLowerBounds(b *testing.B) {
+func BenchmarkLowerBoundAs(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		inverseComplexityCache = nil
-		theLowerBoundCache.next = nil
+		lowerBoundACache = nil
 		for len(inverseComplexityCache) < 76 {
-			advanceTwoTermLowerBounds()
+			advanceLowerBoundAs()
 		}
 	}
 }

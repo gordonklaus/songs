@@ -6,91 +6,75 @@ import (
 )
 
 // TODO: b
-func getLowerBound(b int, D []int) *lowerBoundIterator {
-	offset := D[0]
-	D = append([]int{}, D...)
-	for i := range D {
-		D[i] -= offset
+func getLowerBoundA(b int, D []int) *lowerBoundIterator {
+	if len(D) == 2 {
+		d := D[1] - D[0]
+		for d >= len(lowerBoundACache) {
+			lowerBoundACache = append(lowerBoundACache, &lowerBoundA{})
+		}
+		return newLowerBoundIterator(D[0], lowerBoundACache[d])
 	}
 
-	if len(D) > 2 {
-		return newLowerBoundIterator(newOffsetLowerBound(b, offset, D))
+	if len(D) == 3 {
+		panic("unimplemented")
 	}
 
-	lbc := theLowerBoundCache.get(D)
-	if lbc.lb == nil {
-		lbc.lb = newLowerBound(b, D)
+	lbis := []*lowerBoundIterator{}
+	if len(D)%2 == 1 {
+		lbis = append(lbis, getLowerBoundA(b, D[:3]))
+		D = D[3:]
 	}
-	return newLowerBoundIterator(&offsetLowerBound{
-		offset: offset,
-		lb:     lbc.lb,
-	})
+	for i := 1; i < len(D); i += 2 {
+		lbis = append(lbis, getLowerBoundA(b, D[i-1:i+1]))
+	}
+	eval := func(n int) int {
+		value := 0
+		for _, d := range D {
+			value += complexity(n + d)
+		}
+		return value
+	}
+	return newLowerBoundIterator(0, newLowerBoundSum(b, lbis, eval))
 }
 
-var theLowerBoundCache lowerBoundCache
-
-type lowerBoundCache struct {
-	lb   *lowerBound
-	next []*lowerBoundCache
-}
-
-func (lbc *lowerBoundCache) get(D []int) *lowerBoundCache {
-	if len(D) == 0 {
-		return lbc
-	}
-	d := D[0]
-	for d >= len(lbc.next) {
-		lbc.next = append(lbc.next, nil)
-	}
-	if lbc.next[d] == nil {
-		lbc.next[d] = &lowerBoundCache{}
-	}
-	return lbc.next[d].get(D[1:])
-}
+var lowerBoundACache []*lowerBoundA
 
 type lowerBoundIterator struct {
-	lb               *offsetLowerBound
+	offset           int
+	lb               lowerBound
 	i, n0, n1, value int
 }
 
-func newLowerBoundIterator(lb *offsetLowerBound) *lowerBoundIterator {
-	lbi := &lowerBoundIterator{lb: lb}
-	lbi.increment()
-	return lbi
+func newLowerBoundIterator(offset int, lb lowerBound) *lowerBoundIterator {
+	return &lowerBoundIterator{offset: offset, lb: lb}
 }
 
 func (lbi *lowerBoundIterator) increment() {
 	lbi.i++
-	lb := lbi.lb.lb
-	for lbi.i >= lb.pending {
-		lb.advance()
+	for lbi.i >= len(lbi.lb.getSteps()) {
+		lbi.lb.advance()
 	}
-	step0 := lb.steps[lbi.i-1]
-	step1 := lb.steps[lbi.i]
-	lbi.n0 = step0.n - lbi.lb.offset
-	lbi.n1 = step1.n - lbi.lb.offset
+	steps := lbi.lb.getSteps()
+	step0 := steps[lbi.i-1]
+	step1 := steps[lbi.i]
+	lbi.n0 = step0.n - lbi.offset
+	lbi.n1 = step1.n - lbi.offset
 	lbi.value = step0.value
 }
 
-// TODO: merge into lowerBoundIterator
-type offsetLowerBound struct {
-	offset int
-	lb     *lowerBound
+type lowerBound interface {
+	getSteps() []lowerBoundStep
+	advance()
 }
 
-func newOffsetLowerBound(b, offset int, D []int) *offsetLowerBound {
-	return &offsetLowerBound{
-		offset: offset,
-		lb:     newLowerBound(b, D),
-	}
-}
-
-type lowerBound struct {
+type lowerBoundSum struct {
 	b int
-	D []int
 
-	m       int
-	sum     *lowerBoundSum
+	m        int
+	n, value int
+	lbis     []*lowerBoundIterator
+	eval     func(int) int
+
 	steps   []lowerBoundStep
 	pending int
 }
@@ -99,87 +83,32 @@ type lowerBoundStep struct {
 	n, value int
 }
 
-func newLowerBound(b int, D []int) *lowerBound {
-	partials := []*lowerBoundIterator{}
-	if PD := partition(D); len(PD) > 1 {
-		for _, D := range PD {
-			partials = append(partials, getLowerBound(b, D))
-		}
-	} else if len(D) > 2 {
-		for _, d := range D {
-			partials = append(partials, getLowerBound(b, []int{d}))
-		}
-	}
-
-	return &lowerBound{
-		b:   b,
-		D:   D,
-		sum: newLowerBoundSum(partials),
-		m:   1,
+func newLowerBoundSum(b int, lbis []*lowerBoundIterator, eval func(int) int) *lowerBoundSum {
+	return &lowerBoundSum{
+		b:    b,
+		m:    1,
+		n:    1,
+		lbis: lbis,
+		eval: eval,
 	}
 }
 
-func partition(D []int) [][]int {
-	const maxPartitionSize = 2
+func (lbs *lowerBoundSum) getSteps() []lowerBoundStep { return lbs.steps[:lbs.pending] }
 
-	if len(D) <= maxPartitionSize {
-		return [][]int{D}
-	}
-
-	// i := len(D) / 2
-	// return append(partition(D[:i]), partition(D[i:])...)
-
-	switch maxPartitionSize {
-	case 2:
-		// TODO:  No 1-term partitions.
-		return append(partition(D[2:]), D[:2])
-	case 3:
-		if len(D)%3 == 1 {
-			return append(partition(D[2:]), D[:2])
-		}
-		return append(partition(D[3:]), D[:3])
-	default:
-		panic("not implemented")
-	}
-}
-
-func (lb *lowerBound) advance() {
-	// fmt.Println(lb.D, " --- ", lb.steps[:lb.pending], "-", lb.m)
-	// defer func() {
-	// 	fmt.Println(lb.D, " --- ", lb.steps[:lb.pending], "-", lb.m)
-	// 	fmt.Println()
-	// }()
-
-	if len(lb.D) == 1 {
-		n := 1
-		if lb.pending > 0 {
-			n = 1 + 1<<uint(lb.pending-1)
-		}
-		lb.steps = append(lb.steps, lowerBoundStep{n, lb.pending})
-		lb.pending++
-		return
-	}
-
-	if len(lb.D) == 2 {
-		for next := lb.pending + 1; lb.pending < next; {
-			advanceTwoTermLowerBounds()
-		}
-		return
-	}
-
+func (lb *lowerBoundSum) advance() {
 	for ; ; lb.m++ {
-		if lb.m >= lb.sum.n {
-			if lb.pending < len(lb.steps) && lb.steps[lb.pending].value <= lb.sum.value {
+		if lb.m >= lb.n {
+			if lb.pending < len(lb.steps) && lb.steps[lb.pending].value <= lb.value {
 				lb.pending++
 				return
 			}
-			lb.sum.increment()
+			lb.incrementSum()
 		}
 
 		if gcd(lb.m, lb.b) != 1 {
 			continue
 		}
-		value := lb.evaluate(lb.m)
+		value := lb.eval(lb.m)
 
 		i := len(lb.steps)
 		for ; i >= lb.pending && i > 0; i-- {
@@ -196,28 +125,7 @@ func (lb *lowerBound) advance() {
 	}
 }
 
-func (lb *lowerBound) evaluate(n int) int {
-	value := 0
-	for _, d := range lb.D {
-		value += complexity(n + d)
-	}
-	return value
-}
-
-type lowerBoundSum struct {
-	lbis     []*lowerBoundIterator
-	n, value int
-}
-
-func newLowerBoundSum(lbis []*lowerBoundIterator) *lowerBoundSum {
-	value := 0
-	for _, lbi := range lbis {
-		value += lbi.value
-	}
-	return &lowerBoundSum{lbis, 1, value}
-}
-
-func (lbs *lowerBoundSum) increment() {
+func (lbs *lowerBoundSum) incrementSum() {
 	lbiMinN1 := lbs.lbis[0]
 	for _, lbi := range lbs.lbis {
 		if lbi.n1 < lbiMinN1.n1 {
@@ -228,16 +136,24 @@ func (lbs *lowerBoundSum) increment() {
 	lbs.value -= lbiMinN1.value
 	lbiMinN1.increment()
 	lbs.value += lbiMinN1.value
+}
 
-	// for _, lbi := range lbs.lbis {
-	// 	fmt.Println(lbi.n0, "--", lbi.n1)
-	// }
-	// fmt.Println("---")
+type lowerBoundA struct {
+	steps   []lowerBoundStep
+	pending int
+}
+
+func (lb *lowerBoundA) getSteps() []lowerBoundStep { return lb.steps[:lb.pending] }
+
+func (lb *lowerBoundA) advance() {
+	for next := lb.pending + 1; lb.pending < next; {
+		advanceLowerBoundAs()
+	}
 }
 
 var inverseComplexityCache = [][]int{{1}}
 
-func advanceTwoTermLowerBounds() {
+func advanceLowerBoundAs() {
 	c := len(inverseComplexityCache)
 
 	ics := []int{}
@@ -275,11 +191,10 @@ func advanceTwoTermLowerBounds() {
 					continue
 				}
 
-				lbc := theLowerBoundCache.get([]int{0, d})
-				if lbc.lb == nil {
-					lbc.lb = newLowerBound(1, []int{0, d})
+				for d >= len(lowerBoundACache) {
+					lowerBoundACache = append(lowerBoundACache, &lowerBoundA{})
 				}
-				lb := lbc.lb
+				lb := lowerBoundACache[d]
 
 				if len(lb.steps) == 0 {
 					lb.steps = []lowerBoundStep{{1, 0}}
