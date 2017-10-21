@@ -27,8 +27,9 @@ func TestMelody(t *testing.T) {
 	}
 }
 
+var D = []int{0, 3, 5, 12, 13, 19, 21, 28, 37, 42}
+
 func TestComplexitySum(t *testing.T) {
-	D := []int{0, 3, 5, 12, 13, 19, 21, 28}
 	// cs := newComplexitySum(1, D)
 	lbi := getLowerBoundA(1, D)
 	prevc := 0
@@ -75,7 +76,12 @@ func TestComplexitySum(t *testing.T) {
 }
 
 func BenchmarkComplexitySum(b *testing.B) {
-	D := []int{0, 3, 5, 12, 13, 19, 21, 28}
+	lbi := getLowerBoundA(1, D)
+	for lbi.n1 < 200 {
+		lbi.increment()
+	}
+	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		lbi := getLowerBoundA(1, D)
 		for lbi.n1 < 200 {

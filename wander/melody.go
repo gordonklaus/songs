@@ -451,27 +451,6 @@ func (mc minComplexity) estimateNonDecreasingWithB(b int) float64 {
 	return (N+2)*(N-1)/2*float64(T) + N*mc.D + N*N*(N-1)/2*B - 2*G
 }
 
-var primes = []int{2, 3}
-
-func prime(i int) int {
-	for i >= len(primes) {
-		for x := primes[len(primes)-1] + 2; ; x += 2 {
-			isPrime := true
-			for _, p := range primes {
-				if x%p == 0 {
-					isPrime = false
-					break
-				}
-			}
-			if isPrime {
-				primes = append(primes, x)
-				break
-			}
-		}
-	}
-	return primes[i]
-}
-
 func (m *Melody) trimPastDurations(rd ratio) {
 	if len(m.times) == 0 {
 		return
@@ -595,25 +574,35 @@ func (m *Melody) nextFrequencyComplexity(next ratio) int {
 	return next.complexity()
 }
 
-var complexityCache = []int{0}
+var complexityCache = []int{0, 0}
 
 func complexity(n int) int {
 	for n >= len(complexityCache) {
 		n := len(complexityCache)
-		c := 0
-		for m, d := 1, 2; m != n; d++ {
-			for {
-				md := m * d
-				if n%md != 0 {
-					break
-				}
-				m = md
-				c += d - 1
+		for i := 0; ; i++ {
+			p := prime(i)
+			if n%p == 0 {
+				complexityCache = append(complexityCache, p-1+complexityCache[n/p])
+				break
 			}
 		}
-		complexityCache = append(complexityCache, c)
 	}
 	return complexityCache[n]
+}
+
+var primes = []int{2, 3}
+
+func prime(i int) int {
+n:
+	for n := primes[len(primes)-1] + 2; i >= len(primes); n += 2 {
+		for _, p := range primes {
+			if n%p == 0 {
+				continue n
+			}
+		}
+		primes = append(primes, n)
+	}
+	return primes[i]
 }
 
 func gcd(a, b int) int {

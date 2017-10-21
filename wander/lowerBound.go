@@ -7,37 +7,37 @@ import (
 
 // TODO: b
 func getLowerBoundA(b int, D []int) *lowerBoundIterator {
+	D = append([]int{}, D...)
+	sort.Ints(D)
+	offset := D[0]
+	for i := range D {
+		D[i] -= offset
+	}
+
 	if len(D) == 2 {
-		d := D[1] - D[0]
+		d := D[1]
 		for d >= len(lowerBoundACache) {
 			lowerBoundACache = append(lowerBoundACache, &lowerBoundA{})
 		}
-		return newLowerBoundIterator(D[0], lowerBoundACache[d])
+		return newLowerBoundIterator(offset, lowerBoundACache[d])
 	}
 
-	if len(D) == 3 {
-		panic("unimplemented")
-	}
-
-	lbis := []*lowerBoundIterator{}
-	if len(D)%2 == 1 {
-		lbis = append(lbis, getLowerBoundA(b, D[:3]))
-		D = D[3:]
-	}
-	for i := 1; i < len(D); i += 2 {
-		lbis = append(lbis, getLowerBoundA(b, D[i-1:i+1]))
+	lbis := make([]*lowerBoundIterator, len(D))
+	for i := range D {
+		lbis[i] = getLowerBoundA(b, []int{D[i], D[(i+1)%len(D)]})
 	}
 	eval := func(n int) int {
+		// Fetch all complexities in range, for speed.
+		complexity(n + D[len(D)-1])
+		c := complexityCache[n : n+D[len(D)-1]+1]
 		value := 0
 		for _, d := range D {
-			value += complexity(n + d)
+			value += c[d]
 		}
 		return value
 	}
-	return newLowerBoundIterator(0, newLowerBoundSum(b, lbis, eval))
+	return newLowerBoundIterator(offset, newLowerBoundSum(b, lbis, true, eval))
 }
-
-var lowerBoundACache []*lowerBoundA
 
 type lowerBoundIterator struct {
 	offset           int
@@ -73,6 +73,7 @@ type lowerBoundSum struct {
 	m        int
 	n, value int
 	lbis     []*lowerBoundIterator
+	double   bool
 	eval     func(int) int
 
 	steps   []lowerBoundStep
@@ -83,13 +84,14 @@ type lowerBoundStep struct {
 	n, value int
 }
 
-func newLowerBoundSum(b int, lbis []*lowerBoundIterator, eval func(int) int) *lowerBoundSum {
+func newLowerBoundSum(b int, lbis []*lowerBoundIterator, double bool, eval func(int) int) *lowerBoundSum {
 	return &lowerBoundSum{
-		b:    b,
-		m:    1,
-		n:    1,
-		lbis: lbis,
-		eval: eval,
+		b:      b,
+		m:      1,
+		n:      1,
+		lbis:   lbis,
+		double: double,
+		eval:   eval,
 	}
 }
 
@@ -98,7 +100,11 @@ func (lbs *lowerBoundSum) getSteps() []lowerBoundStep { return lbs.steps[:lbs.pe
 func (lb *lowerBoundSum) advance() {
 	for ; ; lb.m++ {
 		if lb.m >= lb.n {
-			if lb.pending < len(lb.steps) && lb.steps[lb.pending].value <= lb.value {
+			mul := 1
+			if lb.double {
+				mul = 2
+			}
+			if lb.pending < len(lb.steps) && lb.steps[lb.pending].value*mul <= lb.value {
 				lb.pending++
 				return
 			}
@@ -151,28 +157,19 @@ func (lb *lowerBoundA) advance() {
 	}
 }
 
-var inverseComplexityCache = [][]int{{1}}
+var lowerBoundAComplexity int
+var lowerBoundACache []*lowerBoundA
 
 func advanceLowerBoundAs() {
-	c := len(inverseComplexityCache)
+	lowerBoundAComplexity++
+	c := lowerBoundAComplexity
 
-	ics := []int{}
-	for i := 0; ; i++ {
-		p := prime(i)
-		if p-1 > c {
-			break
-		}
-		if c%(p-1) != 0 {
-			continue
-		}
-		for _, n := range inverseComplexityCache[c-p+1] {
-			if n > math.MaxInt64/p {
-				break
-			}
-			ics = append(ics, n*p)
-		}
+	// fmt.Print("advancing lbA ", c)
+	// defer fmt.Println(".")
+
+	for c >= len(inverseComplexityCache) {
+		advanceInverseComplexities()
 	}
-	inverseComplexityCache = append(inverseComplexityCache, uniqueSort(ics))
 
 	for c1, c2 := 0, c; c1 <= c2; c1, c2 = c1+1, c2-1 {
 		for _, n1 := range inverseComplexityCache[c1] {
@@ -216,6 +213,30 @@ func advanceLowerBoundAs() {
 			}
 		}
 	}
+}
+
+var inverseComplexityCache = [][]int{{1}}
+
+func advanceInverseComplexities() {
+	c := len(inverseComplexityCache)
+
+	ics := []int{}
+	for i := 0; ; i++ {
+		p := prime(i)
+		if p-1 > c {
+			break
+		}
+		if c%(p-1) != 0 {
+			continue
+		}
+		for _, n := range inverseComplexityCache[c-p+1] {
+			if n > math.MaxInt64/p {
+				break
+			}
+			ics = append(ics, n*p)
+		}
+	}
+	inverseComplexityCache = append(inverseComplexityCache, uniqueSort(ics))
 }
 
 func uniqueSort(s []int) []int {
