@@ -12,7 +12,6 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 	audio.Play(&song{
 		composer: newComposer(),
-		Reverb:   audio.NewReverb(),
 	})
 }
 
@@ -20,7 +19,7 @@ type song struct {
 	EventDelay audio.EventDelay
 	composer   *composer
 	MultiVoice audio.MultiVoice
-	Reverb     *audio.Reverb
+	Reverb     audio.Reverb
 }
 
 func (s *song) InitAudio(p audio.Params) {
