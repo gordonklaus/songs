@@ -27,9 +27,9 @@ func TestMelody(t *testing.T) {
 	}
 }
 
-var D = []int{0, 3, 5, 12, 13, 19, 21, 28, 37, 42}
+var D = []int{0, 3, 5, 12, 13, 19, 21, 28}
 
-func TestComplexitySum(t *testing.T) {
+func TestLowerBoundA(t *testing.T) {
 	// cs := newComplexitySum(1, D)
 	lbi := getLowerBoundA(1, D)
 	prevc := 0
@@ -75,7 +75,53 @@ func TestComplexitySum(t *testing.T) {
 	fmt.Printf("inverseComplexityCacheSize: %d (%d)\n", len(inverseComplexityCache), inverseComplexityCacheSize)
 }
 
-func BenchmarkComplexitySum(b *testing.B) {
+func TestLowerBoundB(t *testing.T) {
+	// cs := newComplexitySum(1, D)
+	lbi := getLowerBoundB(D)
+	prevc := 0
+	prevlb := 0
+	for n := 1; n <= 20; n++ {
+		c := 0
+		for _, d := range D {
+			c += complexity(n*d + 1)
+		}
+
+		if n >= lbi.n1 {
+			lbi.increment()
+		}
+		lb := lbi.value
+		if lb > c {
+			t.Fatalf("lower bound %d exceeds complexity %d", lb, c)
+		}
+		if lb < prevlb {
+			t.Fatalf("lower bound %d decreased below previous %d", lb, prevlb)
+		}
+		if lb > prevlb && prevlb != prevc {
+			t.Fatalf("lower bound increased to %d but previous lower bound %d did not equal previous complexity %c", lb, prevlb, prevc)
+		}
+
+		// lb2 := cs.lowerBoundB(n)
+		// if lb2 != lb {
+		// 	t.Fatalf("lb2=%d lb1=%d\n%v\n%v\n%d", lb2, lb, lbi.lb.lb.steps, lbi.lb.lb.pending, lbi.lb.lb.m)
+		// }
+		fmt.Println(n, c, lb)
+
+		prevlb = lb
+		prevc = c
+	}
+	// fmt.Println(cs.m, cs.l)
+	// fmt.Println(cs.lb)
+	fmt.Println(lbi.lb.(*lowerBoundSum).m)
+	fmt.Println(lbi.lb.getSteps())
+	fmt.Println("complexityCache:", len(numbers))
+	inverseComplexityCacheSize := 0
+	for _, ns := range inverseComplexityCache {
+		inverseComplexityCacheSize += len(ns)
+	}
+	fmt.Printf("inverseComplexityCacheSize: %d (%d)\n", len(inverseComplexityCache), inverseComplexityCacheSize)
+}
+
+func BenchmarkLowerBoundA(b *testing.B) {
 	lbi := getLowerBoundA(1, D)
 	for lbi.n1 < 200 {
 		lbi.increment()
@@ -90,12 +136,26 @@ func BenchmarkComplexitySum(b *testing.B) {
 	}
 }
 
-func BenchmarkLowerBoundAs(b *testing.B) {
+func BenchmarkLowerBoundB(b *testing.B) {
+	lbi := getLowerBoundB(D)
+	for lbi.n1 < 20 {
+		lbi.increment()
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		lbi := getLowerBoundB(D)
+		for lbi.n1 < 20 {
+			lbi.increment()
+		}
+	}
+}
+
+func BenchmarkInverseComplexities(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		inverseComplexityCache = nil
-		lowerBoundACache = nil
 		for len(inverseComplexityCache) < 76 {
-			advanceLowerBoundAs()
+			advanceInverseComplexities()
 		}
 	}
 }

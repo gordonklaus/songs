@@ -251,12 +251,12 @@ func (m *Melody) genNextDurations() []ratio {
 	amaxsum := 0
 	for b := 1; ; b++ {
 		mc.setB(b)
-		// fmt.Print("  b:", b)
+		fmt.Println("  b:", b)
 		for a := 1; ; a++ {
 			if gcd(a, b) != 1 {
 				continue
 			}
-			// fmt.Println("  a:", a)
+			fmt.Println("  a:", a)
 
 			r := ratio{a, b * mc.lcm}.normalized()
 			durationMultiplier := math.Exp(-m.lastDuration * r.float() / m.avgDuration)
@@ -292,7 +292,7 @@ func (m *Melody) genNextDurations() []ratio {
 				nextDurations = append(nextDurations, r)
 			}
 		}
-		// fmt.Println()
+		fmt.Println()
 	}
 }
 
@@ -381,12 +381,12 @@ func (m *Melody) newMinComplexity() minComplexity {
 	}
 
 	return minComplexity{
-		history: history,
-		// lowerBoundBIter: getLowerBoundB(h2),
-		D:         D,
-		divCounts: divCounts,
-		GD:        GD,
-		lcm:       lcm_,
+		history:         history,
+		lowerBoundBIter: getLowerBoundB(h2),
+		D:               D,
+		divCounts:       divCounts,
+		GD:              GD,
+		lcm:             lcm_,
 	}
 }
 
@@ -443,7 +443,10 @@ func (mc minComplexity) estimateNonDecreasingWithA(a int) float64 {
 
 func (mc minComplexity) estimateNonDecreasingWithB(b int) float64 {
 	// assumes a === 1
-	T := 0 //mc.csb.lowerBoundB(b)
+	if b >= mc.lowerBoundBIter.n1 {
+		mc.lowerBoundBIter.increment()
+	}
+	T := mc.lowerBoundBIter.value
 	B := math.Log2(float64(b))
 
 	N := float64(len(mc.history))
@@ -574,31 +577,37 @@ func (m *Melody) nextFrequencyComplexity(next ratio) int {
 	return next.complexity()
 }
 
-var numbers = []number{{0, nil}, {0, []int{1}}}
+var numbers = []numberInfo{{0}, {0}}
 
-type number struct {
-	c int
-	d []int
+type numberInfo struct {
+	complexity int
+	// divisors   []int
 }
 
-func complexity(n int) int {
+func number(n int) numberInfo {
 	for n >= len(numbers) {
-		n := len(numbers)
+		numbers = append(numbers, numberInfo{})
+	}
+	if n > 1 && numbers[n].complexity == 0 {
 		for i := 0; ; i++ {
 			p := prime(i)
 			if n%p == 0 {
-				m := numbers[n/p]
-				complexity := p - 1 + m.c
-				divisors := append([]int{}, m.d...)
-				for _, d := range m.d {
-					divisors = append(divisors, p*d)
-				}
-				numbers = append(numbers, number{complexity, uniqueSort(divisors)})
+				m := number(n / p)
+				complexity := p - 1 + m.complexity
+				// divisors := append([]int{}, m.divisors...)
+				// for _, d := range m.divisors {
+				// 	divisors = append(divisors, p*d)
+				// }
+				numbers[n].complexity = complexity
 				break
 			}
 		}
 	}
-	return numbers[n].c
+	return numbers[n]
+}
+
+func complexity(n int) int {
+	return number(n).complexity
 }
 
 func divisors(n int) []int {

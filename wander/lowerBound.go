@@ -28,11 +28,11 @@ func getLowerBoundA(b int, D []int) *lowerBoundIterator {
 	}
 	eval := func(n int) int {
 		// Fetch all complexities in range, for speed.
-		complexity(n + D[len(D)-1])
-		nums := numbers[n : n+D[len(D)-1]+1]
+		// complexity(n + D[len(D)-1])
+		// nums := numbers[n : n+D[len(D)-1]+1]
 		value := 0
 		for _, d := range D {
-			value += nums[d].c
+			value += complexity(n + d)
 		}
 		return value
 	}
@@ -40,6 +40,11 @@ func getLowerBoundA(b int, D []int) *lowerBoundIterator {
 }
 
 func getLowerBoundB(D []int) *lowerBoundIterator {
+	D = append([]int{}, D...)
+	sort.Ints(D)
+	if D[0] != 0 {
+		panic("expected zero")
+	}
 	D = D[1:]
 
 	lbis := make([]*lowerBoundIterator, len(D))
@@ -119,6 +124,7 @@ func (lbs *lowerBoundSum) getSteps() []lowerBoundStep { return lbs.steps[:lbs.pe
 
 func (lb *lowerBoundSum) advance() {
 	for ; ; lb.m++ {
+		// fmt.Println("lowerBoundSum.advance", lb.m)
 		if lb.m >= lb.n {
 			mul := 1
 			if lb.double {
@@ -131,9 +137,9 @@ func (lb *lowerBoundSum) advance() {
 			lb.incrementSum()
 		}
 
-		if gcd(lb.m, lb.b) != 1 {
-			continue
-		}
+		// if gcd(lb.m, lb.b) != 1 {
+		// 	continue
+		// }
 		value := lb.eval(lb.m)
 
 		i := len(lb.steps)
@@ -252,16 +258,17 @@ func advanceLowerBoundBs() {
 	lowerBoundBComplexity++
 	c := lowerBoundBComplexity
 
+	// fmt.Println("advanceLowerBoundBs:", c)
+
 	for c >= len(inverseComplexityCache) {
 		advanceInverseComplexities()
 	}
 
 	for _, n := range inverseComplexityCache[c] {
-		for _, d := range divisors(n - 1) {
-			for d >= len(lowerBoundBCache) {
-				lowerBoundBCache = append(lowerBoundBCache, &lowerBoundB{})
+		for d, lb := range lowerBoundBCache {
+			if d == 0 || (n-1)%d != 0 {
+				continue
 			}
-			lb := lowerBoundBCache[d]
 
 			if len(lb.steps) == 0 {
 				lb.steps = []lowerBoundStep{{1, 0}}
