@@ -67,7 +67,7 @@ func TestComplexitySum(t *testing.T) {
 	// fmt.Println(cs.lb)
 	fmt.Println(lbi.lb.(*lowerBoundSum).m)
 	fmt.Println(lbi.lb.getSteps())
-	fmt.Println("complexityCache:", len(complexityCache))
+	fmt.Println("complexityCache:", len(numbers))
 	inverseComplexityCacheSize := 0
 	for _, ns := range inverseComplexityCache {
 		inverseComplexityCacheSize += len(ns)

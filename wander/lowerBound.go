@@ -29,14 +29,34 @@ func getLowerBoundA(b int, D []int) *lowerBoundIterator {
 	eval := func(n int) int {
 		// Fetch all complexities in range, for speed.
 		complexity(n + D[len(D)-1])
-		c := complexityCache[n : n+D[len(D)-1]+1]
+		nums := numbers[n : n+D[len(D)-1]+1]
 		value := 0
 		for _, d := range D {
-			value += c[d]
+			value += nums[d].c
 		}
 		return value
 	}
 	return newLowerBoundIterator(offset, newLowerBoundSum(b, lbis, true, eval))
+}
+
+func getLowerBoundB(D []int) *lowerBoundIterator {
+	D = D[1:]
+
+	lbis := make([]*lowerBoundIterator, len(D))
+	for i, d := range D {
+		for d >= len(lowerBoundBCache) {
+			lowerBoundBCache = append(lowerBoundBCache, &lowerBoundB{})
+		}
+		lbis[i] = newLowerBoundIterator(0, lowerBoundBCache[d])
+	}
+	eval := func(n int) int {
+		value := 0
+		for _, d := range D {
+			value += complexity(n*d + 1)
+		}
+		return value
+	}
+	return newLowerBoundIterator(0, newLowerBoundSum(1, lbis, false, eval))
 }
 
 type lowerBoundIterator struct {
@@ -164,9 +184,6 @@ func advanceLowerBoundAs() {
 	lowerBoundAComplexity++
 	c := lowerBoundAComplexity
 
-	// fmt.Print("advancing lbA ", c)
-	// defer fmt.Println(".")
-
 	for c >= len(inverseComplexityCache) {
 		advanceInverseComplexities()
 	}
@@ -210,6 +227,60 @@ func advanceLowerBoundAs() {
 				} else if lastStep2.value == c && lastStep.n < n {
 					lastStep.n = n
 				}
+			}
+		}
+	}
+}
+
+type lowerBoundB struct {
+	steps   []lowerBoundStep
+	pending int
+}
+
+func (lb *lowerBoundB) getSteps() []lowerBoundStep { return lb.steps[:lb.pending] }
+
+func (lb *lowerBoundB) advance() {
+	for next := lb.pending + 1; lb.pending < next; {
+		advanceLowerBoundBs()
+	}
+}
+
+var lowerBoundBComplexity int
+var lowerBoundBCache []*lowerBoundB
+
+func advanceLowerBoundBs() {
+	lowerBoundBComplexity++
+	c := lowerBoundBComplexity
+
+	for c >= len(inverseComplexityCache) {
+		advanceInverseComplexities()
+	}
+
+	for _, n := range inverseComplexityCache[c] {
+		for _, d := range divisors(n - 1) {
+			for d >= len(lowerBoundBCache) {
+				lowerBoundBCache = append(lowerBoundBCache, &lowerBoundB{})
+			}
+			lb := lowerBoundBCache[d]
+
+			if len(lb.steps) == 0 {
+				lb.steps = []lowerBoundStep{{1, 0}}
+			}
+
+			n := (n-1)/d + 1
+
+			numSteps := len(lb.steps)
+			lastStep := &lb.steps[numSteps-1]
+			var lastStep2 *lowerBoundStep
+			if numSteps > 1 {
+				lastStep2 = &lb.steps[numSteps-2]
+			}
+			if lastStep2 == nil || lastStep2.value < c && lastStep.n < n {
+				lastStep.value = c
+				lb.steps = append(lb.steps, lowerBoundStep{n, 0})
+				lb.pending++
+			} else if lastStep2.value == c && lastStep.n < n {
+				lastStep.n = n
 			}
 		}
 	}

@@ -574,20 +574,35 @@ func (m *Melody) nextFrequencyComplexity(next ratio) int {
 	return next.complexity()
 }
 
-var complexityCache = []int{0, 0}
+var numbers = []number{{0, nil}, {0, []int{1}}}
+
+type number struct {
+	c int
+	d []int
+}
 
 func complexity(n int) int {
-	for n >= len(complexityCache) {
-		n := len(complexityCache)
+	for n >= len(numbers) {
+		n := len(numbers)
 		for i := 0; ; i++ {
 			p := prime(i)
 			if n%p == 0 {
-				complexityCache = append(complexityCache, p-1+complexityCache[n/p])
+				m := numbers[n/p]
+				complexity := p - 1 + m.c
+				divisors := append([]int{}, m.d...)
+				for _, d := range m.d {
+					divisors = append(divisors, p*d)
+				}
+				numbers = append(numbers, number{complexity, uniqueSort(divisors)})
 				break
 			}
 		}
 	}
-	return complexityCache[n]
+	return numbers[n].c
+}
+
+func divisors(n int) []int {
+	return nil
 }
 
 var primes = []int{2, 3}
@@ -678,39 +693,39 @@ func (r ratio) float() float64 { return float64(r.a) / float64(r.b) }
 
 var ratios []ratio
 
-func init() {
-	pow := func(a, x int) int {
-		y := 1
-		for x > 0 {
-			y *= a
-			x--
-		}
-		return y
-	}
-	mul := func(n, d, a, x int) (int, int) {
-		if x > 0 {
-			return n * pow(a, x), d
-		}
-		return n, d * pow(a, -x)
-	}
-	for _, two := range []int{-3, -2, -1, 0, 1, 2, 3} {
-		for _, three := range []int{-2, -1, 0, 1, 2} {
-			for _, five := range []int{-1, 0, 1} {
-				for _, seven := range []int{-1, 0, 1} {
-					n, d := 1, 1
-					n, d = mul(n, d, 2, two)
-					n, d = mul(n, d, 3, three)
-					n, d = mul(n, d, 5, five)
-					n, d = mul(n, d, 7, seven)
-					if (ratio{n, d}).complexity() < 12 {
-						ratios = append(ratios, ratio{n, d})
-					}
-				}
-			}
-		}
-	}
-	sort.Sort(ratiosAscending(ratios))
-}
+// func init() {
+// 	pow := func(a, x int) int {
+// 		y := 1
+// 		for x > 0 {
+// 			y *= a
+// 			x--
+// 		}
+// 		return y
+// 	}
+// 	mul := func(n, d, a, x int) (int, int) {
+// 		if x > 0 {
+// 			return n * pow(a, x), d
+// 		}
+// 		return n, d * pow(a, -x)
+// 	}
+// 	for _, two := range []int{-3, -2, -1, 0, 1, 2, 3} {
+// 		for _, three := range []int{-2, -1, 0, 1, 2} {
+// 			for _, five := range []int{-1, 0, 1} {
+// 				for _, seven := range []int{-1, 0, 1} {
+// 					n, d := 1, 1
+// 					n, d = mul(n, d, 2, two)
+// 					n, d = mul(n, d, 3, three)
+// 					n, d = mul(n, d, 5, five)
+// 					n, d = mul(n, d, 7, seven)
+// 					if (ratio{n, d}).complexity() < 12 {
+// 						ratios = append(ratios, ratio{n, d})
+// 					}
+// 				}
+// 			}
+// 		}
+// 	}
+// 	sort.Sort(ratiosAscending(ratios))
+// }
 
 type ratiosAscending []ratio
 
